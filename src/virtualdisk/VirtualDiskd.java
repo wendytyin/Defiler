@@ -9,25 +9,32 @@ import dblockcache.DBuffer;
 import dblockcache.DBufferObj;
 
 
-public class VirtualDiskd extends VirtualDisk {
+public class VirtualDiskd extends VirtualDisk implements Runnable {
 	
 	private static VirtualDiskd _instance;
+	
 	private LinkedList<DBufferObj> q = new LinkedList<DBufferObj>();
+	private Thread t;
 
+	//Single instance of virtualdisk, single thread running within the instance
 	protected VirtualDiskd(String volName, boolean format)
 			throws FileNotFoundException, IOException {
 		super(volName, format);
-		runRequest();
+		t=new Thread(this);
+		t.start();
+		
 	}
 	protected VirtualDiskd(boolean format)
 			throws FileNotFoundException, IOException {
 		super(format);
-		runRequest();
+		t=new Thread(this);
+		t.start();
 	}
 	protected VirtualDiskd()
 			throws FileNotFoundException, IOException {
 		super();
-		runRequest();
+		t=new Thread(this);
+		t.start();
 	}
 	
 	public static void init(String volName, boolean format)
@@ -48,32 +55,60 @@ public class VirtualDiskd extends VirtualDisk {
 	}
 	
 	
-	public void runRequest() throws IOException{
-		while(q.size()!=0){
-			DBufferObj tmp=q.poll();
-			if (tmp.getOp()==DiskOperationType.READ){
-				int i=readBlock(tmp.getBuf());
+	//multiple producers, one consumer
+	synchronized private DBufferObj getRequest() throws InterruptedException {
+		while (q.size()==0){
+			wait();
+		}
+		DBufferObj tmp=q.poll();
+		return tmp;
+	}
+
+	private void doRequest(DBufferObj request){
+		assert(request!=null);
+		try {
+			if (request.getOp()==DiskOperationType.READ){
+				int i;
+				i = readBlock(request.getBuf());
 				if (i==-1){
-					System.err.println("read failed");
+					System.err.println("EOF reached, read failed");
 				}
-				tmp.getBuf().ioComplete();
-			} else if (tmp.getOp()==DiskOperationType.WRITE){
-				writeBlock(tmp.getBuf());
-				tmp.getBuf().ioComplete();
+			} else if (request.getOp()==DiskOperationType.WRITE){
+				writeBlock(request.getBuf());
 			} else {
 				System.err.println(" wut");
 			}
-		}	
-	}
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			System.err.println("Disk op failed");
+			e.printStackTrace();
+		}
+		request.getBuf().ioComplete();
+	}	
+	
 	@Override
 	synchronized public void startRequest(DBuffer buf, DiskOperationType operation)
 			throws IllegalArgumentException, IOException {
-		//TODO: STORE THAT DBUFFER REFERENCE, IOCOMPLETE
 		{
 			DBufferObj bufObj = new DBufferObj(buf, operation);
 			q.add(bufObj);			
 		}
-			
+	}
+	
+	
+	@Override
+	public void run() {
+		while (true){
+			DBufferObj tmp;
+			try {
+				tmp = getRequest();
+			} catch (InterruptedException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+				break;
+			}
+			doRequest(tmp);
+		}
 	}
 
 }
