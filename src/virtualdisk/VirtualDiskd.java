@@ -91,7 +91,8 @@ public class VirtualDiskd extends VirtualDisk implements Runnable {
 			throws IllegalArgumentException, IOException {
 		{
 			DBufferObj bufObj = new DBufferObj(buf, operation);
-			q.add(bufObj);			
+			q.add(bufObj);
+			notifyAll(); //wake up virtualdisk thread if it is sleeping
 		}
 	}
 	

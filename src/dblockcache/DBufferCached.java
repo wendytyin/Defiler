@@ -1,13 +1,19 @@
 package dblockcache;
 
+import java.util.HashMap;
+import java.util.LinkedList;
+
 public class DBufferCached extends DBufferCache {
 	
 	private static DBufferCached _instance;
 	
-	//TODO: KEEP FIXED SIZE of _cacheSize LIST OF DBUFFERS
+	private HashMap<Integer,DBuffer> bufmap=new HashMap<Integer,DBuffer>();  //map blockid->dbuffer
+	private LinkedList<DBuffer> lru=new LinkedList<DBuffer>();
 	
 	protected DBufferCached(int cacheSize) {
 		super(cacheSize);
+		for (int i=0;i<cacheSize;i++){
+		}
 	}
 	
 	public static void init(int cacheSize){
@@ -20,16 +26,14 @@ public class DBufferCached extends DBufferCache {
 	
 
 	@Override
-	public DBuffer getBlock(int blockID) {
+	synchronized public DBuffer getBlock(int blockID) {
 		// TODO Auto-generated method stub
-		
-		//TODO: LRU
 		
 		return null;
 	}
 
 	@Override
-	public void releaseBlock(DBuffer buf) {
+	synchronized public void releaseBlock(DBuffer buf) {
 		// TODO Auto-generated method stub
 		
 	}
