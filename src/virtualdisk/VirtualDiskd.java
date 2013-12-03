@@ -64,32 +64,27 @@ public class VirtualDiskd extends VirtualDisk implements Runnable {
 		return tmp;
 	}
 
-	private void doRequest(DBufferObj request){
+	private void doRequest(DBufferObj request) throws IOException{
 		assert(request!=null);
-		try {
-			if (request.getOp()==DiskOperationType.READ){
-				int i;
-				i = readBlock(request.getBuf());
-				if (i==-1){
-					System.err.println("EOF reached, read failed");
-				}
-			} else if (request.getOp()==DiskOperationType.WRITE){
-				writeBlock(request.getBuf());
-			} else {
-				System.err.println(" wut");
+		if (request.getOp()==DiskOperationType.READ){
+			int i;
+			i = readBlock(request.getBuf());
+			if (i==-1){
+				System.err.println("EOF reached, read failed");
 			}
-		} catch (IOException e) {
-			// TODO Auto-generated catch block
-			System.err.println("Disk op failed");
-			e.printStackTrace();
+		} else if (request.getOp()==DiskOperationType.WRITE){
+			writeBlock(request.getBuf());
+		} else {
+			System.err.println(" wut");
 		}
 		request.getBuf().ioComplete();
 	}	
 	
 	@Override
 	synchronized public void startRequest(DBuffer buf, DiskOperationType operation)
-			throws IllegalArgumentException, IOException {
+			throws IllegalArgumentException {
 		{
+			if (buf==null || operation==null){ throw new IllegalArgumentException("bad buffer\n");}
 			DBufferObj bufObj = new DBufferObj(buf, operation);
 			q.add(bufObj);
 			notifyAll(); //wake up virtualdisk thread if it is sleeping
@@ -104,11 +99,16 @@ public class VirtualDiskd extends VirtualDisk implements Runnable {
 			try {
 				tmp = getRequest();
 			} catch (InterruptedException e) {
-				// TODO Auto-generated catch block
 				e.printStackTrace();
 				break;
 			}
-			doRequest(tmp);
+			try {
+				doRequest(tmp);
+			} catch (IOException e) {
+				System.err.println("file error");
+				e.printStackTrace();
+				break;
+			}
 		}
 	}
 

@@ -1,49 +1,78 @@
 package dblockcache;
 
-import common.Constants;
+import java.io.IOException;
 
-/*
- * EACH BUFFER HAS AT MOST ONE I/O OPERATION PENDING AT ONE TIME 
- * So we must have synchronization on waitClean/waitValid... //wty3
- * 
- */
+import virtualdisk.VirtualDisk;
+import common.Constants;
+import common.Constants.DiskOperationType;
+
 public class DBufferd extends DBuffer {
 	
+	private static VirtualDisk vd; //to be initialized in DBufferCache
+	
 	private byte[] myBuffer;
-	private int BID; //block id
+	public final int BID; //block id
 	private boolean clean;
 	private boolean busy;
-	private Constants.DiskOperationType op;
-	
+	private boolean valid;
 
-	public DBufferd(int blockid){
+	public DBufferd(int blockid, VirtualDisk vd){
 		BID=blockid;
+		DBufferd.vd=vd;
 		clean=true;
+		busy=true;
+		valid=false;
+		myBuffer=new byte[Constants.BLOCK_SIZE];
+	}
+	
+	public void hold(){
+		busy=true;
+	}
+	public void release(){
 		busy=false;
 	}
 	
+	//Asynchronous return from vd
 	@Override
 	public void startFetch() {
-		// TODO Auto-generated method stub
+		try {
+			vd.startRequest(this, DiskOperationType.READ);
+		} catch (IllegalArgumentException e) {
+			e.printStackTrace();
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
 		
 	}
 
+	//Asynchronous return from vd
 	@Override
 	public void startPush() {
-		// TODO Auto-generated method stub
-		
+		try {
+			vd.startRequest(this, DiskOperationType.WRITE);
+		} catch (IllegalArgumentException e) {
+			e.printStackTrace();
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
 	}
 
 	@Override
 	public boolean checkValid() {
-		// TODO Auto-generated method stub
-		return false;
+		return valid;
 	}
 
 	@Override
-	public boolean waitValid() {
-		// TODO Auto-generated method stub
-		return false;
+	public synchronized boolean waitValid() {
+		while (!valid){
+			startFetch();
+			try {
+				wait();
+			} catch (InterruptedException e) {
+				e.printStackTrace();
+			}
+		}
+		return valid;
 	}
 
 	@Override
@@ -52,9 +81,16 @@ public class DBufferd extends DBuffer {
 	}
 
 	@Override
-	public boolean waitClean() {
-		// TODO Auto-generated method stub
-		return false;
+	public synchronized boolean waitClean() {
+		while (!clean){
+			startPush();
+			try {
+				wait();
+			} catch (InterruptedException e) {
+				e.printStackTrace();
+			}
+		}
+		return clean;
 	}
 
 	@Override
@@ -64,18 +100,33 @@ public class DBufferd extends DBuffer {
 
 	@Override
 	public int read(byte[] buffer, int startOffset, int count) {
-		return 0;
+		if (valid){
+			if (startOffset>=Constants.BLOCK_SIZE){startOffset=Constants.BLOCK_SIZE;}
+			for (int i=0;i<count;i++){
+				buffer[i+startOffset]=myBuffer[i]; //copy into buffer
+			}
+		} else {return -1;} //invalid data
+		return count; 
 	}
 
 	@Override
 	public int write(byte[] buffer, int startOffset, int count) {
-		return 0;
+		if (valid){
+			if (startOffset>=Constants.BLOCK_SIZE){startOffset=Constants.BLOCK_SIZE;}
+			for (int i=0;i<count;i++){
+				myBuffer[i]=buffer[i+startOffset]; //copy into buffer
+			}
+		} else {return -1;} //invalid data
+		clean=false;
+		return count;
 	}
 
 	@Override
-	public void ioComplete() {
-		// TODO Auto-generated method stub
+	public synchronized void ioComplete() {
+		valid=true;
+		clean=true;
 		
+		notifyAll();
 	}
 
 	@Override
@@ -88,10 +139,11 @@ public class DBufferd extends DBuffer {
 		return myBuffer;
 	}
 	
+	
+	//TODO: NECESSARY?
 	@Override
 	public boolean equals(Object o){
-		//TODO compare block ids. Note each dbuffer must map 1:1 with blockid //wty3
-		return false;
+		return this.BID==((DBufferd)o).BID;
 	}
 	
 	@Override
