@@ -6,12 +6,12 @@
  * Team Info & Time spent
  *************************/
 
-	Name1: Full Name 	// Edit this accordingly
-	NetId1: fn	 	// Edit
+	Name1: Wendy Yin	// Edit this accordingly
+	NetId1: wty3	 	// Edit
 	Time spent: 10 hours 	// Edit 
 
-	Name2: Full Name 	// Edit this accordingly
-	NetId2: fn	 	// Edit
+	Name2: Helena Wu 	// Edit this accordingly
+	NetId2: hw87	 	// Edit
 	Time spent: 10 hours 	// Edit 
 
 	Name3: Full Name 	// Edit this accordingly
@@ -44,6 +44,18 @@
  * In case of lab is limited in some functionality, you should provide the
  * details to maximize your partial credit.  
  * */
+
+/*** RULES ***/
+CONSTANTS
+	INODE_SIZE must be a whole number multiple of size of integer in bytes (4 bytes)
+	
+DFS
+	SPECIAL CASE: if an inode has size==1 but its block map is all 0s, it is a newly created DFile that is empty.
+	This is important for different programs using the same VDF during initialization
+	Inodes must be zeroed when destroyed.
+
+
+
 
 /************************
  * Feedback on the lab

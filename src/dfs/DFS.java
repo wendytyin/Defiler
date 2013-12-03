@@ -7,8 +7,8 @@ import common.DFileID;
 
 public abstract class DFS {
 		
-	private boolean _format;
-	private String _volName;
+	protected boolean _format;
+	protected String _volName;
 
 	/* 
 	 * @volName: Explicitly overwrite volume name

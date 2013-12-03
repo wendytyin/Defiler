@@ -7,6 +7,7 @@ import java.util.LinkedList;
 import common.Constants.DiskOperationType;
 import dblockcache.DBuffer;
 import dblockcache.DBufferObj;
+import dfs.DFSd;
 
 
 public class VirtualDiskd extends VirtualDisk implements Runnable {
@@ -36,21 +37,20 @@ public class VirtualDiskd extends VirtualDisk implements Runnable {
 		t=new Thread(this);
 		t.start();
 	}
-	
-	public static void init(String volName, boolean format)
-			throws FileNotFoundException, IOException {
-		_instance=new VirtualDiskd(volName,format);
+
+	public static VirtualDiskd instance(String volName, boolean format) 
+			throws FileNotFoundException, IOException{
+		if (_instance==null){ _instance=new VirtualDiskd(volName,format);}
+		return _instance;
 	}
-	public static void init(boolean format)
-			throws FileNotFoundException, IOException {
-		_instance=new VirtualDiskd(format);
+	public static VirtualDiskd instance(boolean format) 
+			throws FileNotFoundException, IOException{
+		if (_instance==null){ _instance=new VirtualDiskd(format);}
+		return _instance;
 	}
-	public static void init()
-			throws FileNotFoundException, IOException {
-		_instance=new VirtualDiskd();
-	}
-	
-	public static VirtualDiskd instance(){
+	public static VirtualDiskd instance() 
+			throws FileNotFoundException, IOException{
+		if (_instance==null){ _instance=new VirtualDiskd();}
 		return _instance;
 	}
 	

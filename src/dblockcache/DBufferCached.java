@@ -4,7 +4,6 @@ import java.util.HashMap;
 import java.util.LinkedList;
 
 import virtualdisk.VirtualDisk;
-import virtualdisk.VirtualDiskd;
 
 public class DBufferCached extends DBufferCache {
 	
@@ -19,12 +18,9 @@ public class DBufferCached extends DBufferCache {
 		super(cacheSize);
 	}
 	
-	public static void init(int cacheSize, VirtualDiskd vd){
-		_instance=new DBufferCached(cacheSize);
-		DBufferCached.vd=vd;
-	}
-	
-	public static DBufferCached instance(){
+	public static DBufferCached instance(int cacheSize, VirtualDisk disk){
+		if (_instance==null){_instance=new DBufferCached(cacheSize);}
+		DBufferCached.vd=disk;
 		return _instance;
 	}
 	
@@ -91,9 +87,22 @@ public class DBufferCached extends DBufferCache {
 	@Override
 	public void sync() {
 		for (DBuffer d: bufmap.values()){
-			if (!d.checkClean()){
-				d.waitClean();
+			synchronized(d){
+				while (d.isBusy()){
+					try {
+						wait();
+					} catch (InterruptedException e) {
+						e.printStackTrace();
+					}
+				}
+				((DBufferd) d).hold();
 			}
+			if (d.checkValid()){
+				if (!d.checkClean()){
+					d.waitClean();
+				}
+			}
+			releaseBlock(d);
 		}
 	}
 
