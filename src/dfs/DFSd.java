@@ -99,17 +99,28 @@ public class DFSd extends DFS {
 		
 		buildMetadata();
 		System.out.println("File system initialized.");
+
 	}
 	
 	private void buildMetadata() {
 		//loop through blocks that contain inodes
 		for (int BID=1;BID<Constants.DATA_REGION;BID++){
+			//test
+			System.out.println("entered buildmetadata, BID = " + BID);
 			IntBuffer ib=getBlockAsInts(BID);
-
+			
+			//test
+			System.out.println("After getBlock as ints");
+				
 			//loop through inodes
 			for (int i=0;i<Constants.INODES_PER_BLOCK;i++){
 				if (ib.get((i*Constants.INTS_PER_INODE))>0){ //used inode
-
+					
+					//test	
+					System.out.println("At block " + BID + " inode " + i);
+					
+					
+					
 					//remove file id from free list
 					int FID=getFID(BID,i);
 					free_inodes.remove(FID);
@@ -421,6 +432,12 @@ public class DFSd extends DFS {
 	@Override
 	public List<DFileID> listAllDFiles() {
 		Set<DFileID> tmp=fs.keySet();
+		//test...to del
+		for(DFileID id:tmp){
+			System.out.println(id.getDFileID());
+		}
+		
+			
 		return new ArrayList<DFileID>(tmp);
 	}
 

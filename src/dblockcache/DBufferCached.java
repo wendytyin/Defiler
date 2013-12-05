@@ -76,6 +76,7 @@ public class DBufferCached extends DBufferCache {
 		synchronized(buf){
 			((DBufferd) buf).release();
 			buf.notifyAll(); //wake up threads waiting on busy buffer
+
 		}
 	}
 

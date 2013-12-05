@@ -23,6 +23,8 @@ public class VirtualDiskd extends VirtualDisk implements Runnable {
 		super(volName, format);
 		t=new Thread(this);
 		t.start();
+		//test
+		System.out.println("Virtual disk started...");
 		
 	}
 	protected VirtualDiskd(boolean format)
