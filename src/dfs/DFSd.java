@@ -96,7 +96,7 @@ public class DFSd extends DFS {
 		
 		buildMetadata();
 	}
-
+	
 	private void buildMetadata() {
 		//loop through blocks that contain inodes
 		for (int BID=1;BID<Constants.DATA_REGION;BID++){
@@ -104,7 +104,7 @@ public class DFSd extends DFS {
 
 			//loop through inodes
 			for (int i=0;i<Constants.INODES_PER_BLOCK;i++){
-				if (ib.get((i*Constants.INTS_PER_BLOCK))>0){ //used inode
+				if (ib.get((i*Constants.INTS_PER_INODE))>0){ //used inode
 
 					//remove file id from free list
 					int FID=getFID(BID,i);
@@ -116,87 +116,47 @@ public class DFSd extends DFS {
 					fs.put(new DFileID(FID), iblocks);
 
 					int fileBlocks=0;
-					boolean valid=true;
+					int expectedBlocks=iblocks[0]/Constants.BLOCK_SIZE;
 
 					//special case of empty file
 					if (iblocks[0]==1 && iblocks[1]==0){ 
 						continue;
 					}
 					
-					//TODO: MAKE THESE LOOPS PRETTIER AND LESS REPETITIVE
-					
-					//loop through blockIDs belonging to inode
+					//loop through blockIDs belonging to inode, stop at invalid blocks or end of recorded file size
 					for (int j=1;j<Constants.INTS_PER_INODE;j++){
-						if (valid==false) { break; } //reached end of dFile
-						if (iblocks[j]<Constants.DATA_REGION || iblocks[j]>=Constants.NUM_OF_BLOCKS){ //invalid blocks, truncate file
-							valid=false;
+						if (fileBlocks>=expectedBlocks){
 							break;
 						}
-
-						boolean freed=free_data_blocks.remove(iblocks[j]);
-
-						if (!freed){ //block already used elsewhere
-							valid=false;
-							break;
-						}
-
+						
 						if (j==(Constants.INTS_PER_INODE-2)){
-							//singly indirect block
-							IntBuffer ib2=getBlockAsInts(iblocks[j]);
-							for (int k=0;k<Constants.INTS_PER_BLOCK;k++){
-								if (valid==false){break;}
-								int b=ib2.get(k);
-								if (b<Constants.DATA_REGION || b>=Constants.NUM_OF_BLOCKS){
-									valid=false;
-									break;
-								}
-								freed=free_data_blocks.remove(ib2.get(k));
-								if (!freed){
-									valid=false;
-									break;
-								}
-								fileBlocks++;
+							//singly
+							int tmp=removeUsedBlock(iblocks[j],(expectedBlocks-fileBlocks), 1);
+							fileBlocks+=tmp;
+							if (tmp<Constants.INTS_PER_BLOCK){
+								//file ended at a sub-block
+								break;
 							}
 						}
 						else if (j==(Constants.INTS_PER_INODE-1)){
-							//doubly indirect block
-							IntBuffer ib2=getBlockAsInts(iblocks[j]);
-							for (int k=0;k<Constants.INTS_PER_BLOCK;k++){
-								if (valid==false){break;}
-								int b=ib2.get(k);
-								if (b<Constants.DATA_REGION || b>=Constants.NUM_OF_BLOCKS){
-									valid=false;
-									break;
-								}
-								freed=free_data_blocks.remove(ib2.get(k));
-								if (!freed){
-									valid=false;
-									break;
-								}
-								IntBuffer ib3=getBlockAsInts(ib2.get(k));
-								for (int l=0;l<Constants.INTS_PER_BLOCK;l++){
-									if (valid==false){break;}
-									int b2=ib3.get(l);
-									if (b2<Constants.DATA_REGION || b2>=Constants.NUM_OF_BLOCKS){
-										valid=false;
-										break;
-									}
-									freed=free_data_blocks.remove(ib3.get(l));
-									if (!freed){
-										valid=false;
-										break;
-									}
-									fileBlocks++;
-								}
+							//doubly
+							int tmp=removeUsedBlock(iblocks[j],(expectedBlocks-fileBlocks), 2);
+							if (tmp==0){ //should be impossible
+								break;
 							}
+							fileBlocks+=tmp;
 						}
 						else {
-							//direct block
-							fileBlocks++;
+							//singly
+							int tmp=removeUsedBlock(iblocks[j], (expectedBlocks-fileBlocks), 0);
+							if (tmp==-1){
+								break;
+							}
+							fileBlocks+=tmp;
 						}
 					} // end block map loop
-					int expectedBlocks=((iblocks[0]-1)/Constants.BLOCK_SIZE)+1;
-					if (valid==false || expectedBlocks>fileBlocks){
+					
+					if (expectedBlocks>fileBlocks){
 						iblocks[0]=fileBlocks*Constants.BLOCK_SIZE;
 						ib.put(iblocks,(i*Constants.INTS_PER_INODE), Constants.INTS_PER_INODE); //make sure consistent inode
 					}
@@ -209,6 +169,52 @@ public class DFSd extends DFS {
 		} // end block loop
 	}
 	
+	/*
+	 * Mark data blocks in from inode as used
+	 */
+	private int removeUsedBlock(int BID, int limit, int depth){
+		if (BID<Constants.DATA_REGION || BID>=Constants.NUM_OF_BLOCKS){ //invalid blocks, truncate file
+			return -1;
+		}
+		if (limit==0){
+			return -1;
+		}
+		boolean freed=free_data_blocks.remove(BID);
+		if (!freed){ //block already used elsewhere
+			return -1;
+		}
+		if (depth==0){ //direct
+			return 1;
+		} 
+		else if (depth==1){ //singly
+			IntBuffer ib=getBlockAsInts(BID);
+			int subCt=0;
+			for (int i=0;i<Constants.INTS_PER_BLOCK;i++){
+				int tmp=removeUsedBlock(ib.get(i), limit, 0);
+				if (tmp==-1){
+					return subCt;
+				}
+				limit-=tmp;
+				subCt+=tmp;
+			}
+			return subCt;
+		}
+		else if (depth==2){ //doubly
+			IntBuffer ib=getBlockAsInts(BID);
+			int subCt=0;
+			for (int i=0;i<Constants.INTS_PER_BLOCK;i++){
+				int tmp=removeUsedBlock(ib.get(i), limit, 1);
+				limit-=tmp;
+				subCt+=tmp;
+				if (tmp<Constants.INTS_PER_BLOCK){ //file ends at one of sub-blocks
+					return subCt;
+				}
+			}
+			return subCt;
+		}
+		return 0; //should be impossible
+	}
+	
 	private IntBuffer getBlockAsInts(int BID){
 		byte[] buffer=new byte[Constants.BLOCK_SIZE];
 		readBlock(BID,buffer,0,Constants.BLOCK_SIZE);
@@ -217,7 +223,6 @@ public class DFSd extends DFS {
 		IntBuffer ib=bb.asIntBuffer();
 		return ib;
 	}
-	
 	private int getFID(int BID, int iOffset){
 		return (((BID-1)*Constants.INODES_PER_BLOCK)+iOffset+1);
 	}
@@ -258,6 +263,11 @@ public class DFSd extends DFS {
 		return did;
 	}
 
+	
+	private void destroyDFile(int BID, int limit, int depth){
+		
+	}
+	
 	@Override
 	public synchronized void destroyDFile(DFileID dFID) {
 		if (dFID.getDFileID()<1 || dFID.getDFileID()>=Constants.DATA_REGION){return;} //invalid dFID
@@ -266,17 +276,22 @@ public class DFSd extends DFS {
 		iblocks[0]=0;
 		
 		for (int i=1;i<Constants.INTS_PER_INODE;i++){
-			if (iblocks[i]<Constants.DATA_REGION || iblocks[i]>=Constants.NUM_OF_BLOCKS){continue;}
-			
+			if (iblocks[i]<Constants.DATA_REGION || iblocks[i]>=Constants.NUM_OF_BLOCKS){
+				continue;
+				}
 			if (i==(Constants.INTS_PER_INODE-2)){
 				//singly indirect
 				IntBuffer ib2=getBlockAsInts(iblocks[i]);
 				for (int j=0;j<Constants.INTS_PER_BLOCK;j++){
+					
 					int b=ib2.get(j);
-					if (b<Constants.DATA_REGION || b>=Constants.NUM_OF_BLOCKS){continue;}
+					if (b<Constants.DATA_REGION || b>=Constants.NUM_OF_BLOCKS){
+						continue;
+					}
 					free_data_blocks.add(b);
 				}
 			}
+			
 			else if (i==(Constants.INTS_PER_INODE-1)){
 				//doubly indirect
 				IntBuffer ib2=getBlockAsInts(iblocks[i]);
@@ -341,7 +356,8 @@ public class DFSd extends DFS {
 		if (iblocks==null){return -1;} //no such fileID in use
 		
 		int isize=iblocks[0];
-		//TODO
+		//TODO: LOOP THRU BLOCKS BELONGING TO FILE, READ THEM OUT.
+		//q: IS THERE A WAY TO DETERMINE ACTUAL SIZE OF FILE FROM INTS RETURNED?
 		return 0;
 	}
 
@@ -350,6 +366,22 @@ public class DFSd extends DFS {
 		if (dFID.getDFileID()<1 || dFID.getDFileID()>=Constants.DATA_REGION){return -1;} //invalid dFID
 		int[] iblocks=fs.get(dFID);
 		if (iblocks==null){return -1;} //no such fileID in use
+		
+		if (count>iblocks[0]){ //need to increase size of file and change inode
+			int oldSize=iblocks[0];
+			int remainingSpace=Constants.BLOCK_SIZE-(oldSize%Constants.BLOCK_SIZE);
+			int tmp=count-oldSize;
+			int increase=tmp/Constants.BLOCK_SIZE;
+			int partial=tmp%Constants.BLOCK_SIZE;
+			if (partial>remainingSpace){
+				increase+=1;
+			}
+			
+			//TODO: ADD BLOCKS TO INODE IF INCREASE>0
+			
+			iblocks[0]=count;
+			//TODO: WRITE BACK INODE TO DISK
+		}
 		//TODO
 		return 0;
 	}
