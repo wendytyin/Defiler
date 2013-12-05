@@ -20,7 +20,7 @@ public class DBufferd extends DBuffer {
 		BID=blockid;
 		DBufferd.vd=vd;
 		clean=true;
-		busy=true;
+		busy=false;
 		valid=false;
 		myBuffer=new byte[Constants.BLOCK_SIZE];
 	}
@@ -70,7 +70,7 @@ public class DBufferd extends DBuffer {
 		while (!valid){
 			startFetch();
 			try {
-				wait();
+				this.wait();
 			} catch (InterruptedException e) {
 				e.printStackTrace();
 			}
@@ -88,7 +88,7 @@ public class DBufferd extends DBuffer {
 		while (!clean){
 			startPush();
 			try {
-				wait();
+				this.wait();
 			} catch (InterruptedException e) {
 				e.printStackTrace();
 			}
@@ -131,7 +131,7 @@ public class DBufferd extends DBuffer {
 		valid=true;
 		clean=true;
 		
-		notifyAll();
+		this.notifyAll(); //wakes up threads in waitValid and waitClean 
 	}
 
 	@Override

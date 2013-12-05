@@ -75,6 +75,7 @@ public class DFSd extends DFS {
 	//this method should only be called once within a program. It is not thread-safe.
 	@Override
 	public void init() {
+		System.out.println("Initializing file system...");
 		//get Singletons of other layers
 		try {
 			disk=VirtualDiskd.instance(_volName,_format);
@@ -97,6 +98,7 @@ public class DFSd extends DFS {
 		}
 		
 		buildMetadata();
+		System.out.println("File system initialized.");
 	}
 	
 	private void buildMetadata() {
@@ -344,7 +346,10 @@ public class DFSd extends DFS {
 		int[] iblocks=fs.get(dFID);
 		if (iblocks==null){return -1;} //no such fileID in use
 		
-		int isize=iblocks[0];
+		int iSize=iblocks[0];
+		int expectedBlocks=iSize/Constants.BLOCK_SIZE;
+		
+		
 		//TODO: LOOP THRU BLOCKS BELONGING TO FILE, READ THEM OUT.
 		//q: IS THERE A WAY TO DETERMINE ACTUAL SIZE OF FILE FROM INTS RETURNED?
 		return 0;

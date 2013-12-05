@@ -41,7 +41,7 @@ public class DBufferCached extends DBufferCache {
 						d=bufmap.get(tmp);
 						if (!d.isBusy()){
 							if (!d.checkClean()){d.waitClean();} //push dirty block to disk
-							lru.remove(tmp);
+							lru.removeFirstOccurrence(tmp);
 							bufmap.remove(tmp);
 							d=new DBufferd(blockID,vd);
 							lru.add(blockID);
@@ -57,7 +57,7 @@ public class DBufferCached extends DBufferCache {
 		synchronized(d){
 			while (d.isBusy()){
 				try {
-					wait();
+					d.wait();
 				} catch (InterruptedException e) {
 					e.printStackTrace();
 				}
@@ -65,7 +65,7 @@ public class DBufferCached extends DBufferCache {
 			((DBufferd) d).hold();
 		}
 		synchronized(this){ //put buffer at mru position
-			lru.remove(blockID);
+			lru.removeFirstOccurrence(blockID);
 			lru.add(blockID);
 		}
 		return d;
@@ -75,7 +75,7 @@ public class DBufferCached extends DBufferCache {
 	public void releaseBlock(DBuffer buf) {
 		synchronized(buf){
 			((DBufferd) buf).release();
-			notifyAll();
+			buf.notifyAll(); //wake up threads waiting on busy buffer
 		}
 	}
 
@@ -85,7 +85,7 @@ public class DBufferCached extends DBufferCache {
 			synchronized(d){
 				while (d.isBusy()){
 					try {
-						wait();
+						d.wait();
 					} catch (InterruptedException e) {
 						e.printStackTrace();
 					}
