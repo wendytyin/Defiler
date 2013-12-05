@@ -42,17 +42,9 @@ public class DFSd extends DFS {
 	private DBufferCache cache;
 	private VirtualDisk disk;
 	
-	private HashMap<DFileID,DBlockList> fs;
+	private HashMap<DFileID,int[]> fs;
 	private TreeSet<Integer> free_data_blocks; //block ids 
 	private TreeSet<Integer> free_inodes; // file ids
-	
-	
-	private static final int intBytes=4;
-	
-	private static final int inode_per_block=Constants.BLOCK_SIZE/Constants.INODE_SIZE;
-	private static final int data_region=((Constants.MAX_DFILES-1)/inode_per_block)+2;
-	private static final int ints_per_inode=Constants.INODE_SIZE/intBytes;
-	
 	
 	protected DFSd(String volName, boolean format) {
 		super(volName,format);
@@ -77,9 +69,11 @@ public class DFSd extends DFS {
 		return _instance;
 	}
 
-
+	
+	//this method should only be called once within a program. It is not thread-safe.
 	@Override
 	public void init() {
+		//get Singletons of other layers
 		try {
 			disk=VirtualDiskd.instance(_volName,_format);
 		} catch (FileNotFoundException e) {
@@ -89,23 +83,150 @@ public class DFSd extends DFS {
 		}
 		cache=DBufferCached.instance(Constants.NUM_OF_CACHE_BLOCKS, disk);
 		
-		fs=new HashMap<DFileID,DBlockList>();
+		//initialize metadata
+		fs=new HashMap<DFileID,int[]>();
 		free_data_blocks=new TreeSet<Integer>();
 		free_inodes=new TreeSet<Integer>();
-		for (int i=data_region;i<Constants.NUM_OF_BLOCKS;i++){
+		for (int i=Constants.DATA_REGION;i<Constants.NUM_OF_BLOCKS;i++){
 			free_data_blocks.add(i);
 		}
 		for (int i=1;i<Constants.MAX_DFILES;i++){
 			free_inodes.add(i);
 		}
 		
+		buildMetadata();
+	}
+
+	private void buildMetadata() {
+		//loop through blocks that contain inodes
+		for (int BID=1;BID<Constants.DATA_REGION;BID++){
+			IntBuffer ib=getBlockAsInts(BID);
+
+			//loop through inodes
+			for (int i=0;i<Constants.INODES_PER_BLOCK;i++){
+				if (ib.get((i*Constants.INTS_PER_BLOCK))>0){ //used inode
+
+					//remove file id from free list
+					int FID=getFID(BID,i);
+					free_inodes.remove(FID);
+
+					//get the block map, put it in our map
+					int[] iblocks=new int[Constants.INTS_PER_BLOCK];
+					ib.get(iblocks, (i*Constants.INTS_PER_BLOCK), Constants.INTS_PER_BLOCK); //read out inode into int array
+					fs.put(new DFileID(FID), iblocks);
+
+					int fileBlocks=0;
+					boolean valid=true;
+
+					//special case of empty file
+					if (iblocks[0]==1 && iblocks[1]==0){ 
+						continue;
+					}
+					
+					//TODO: MAKE THESE LOOPS PRETTIER AND LESS REPETITIVE
+					
+					//loop through blockIDs belonging to inode
+					for (int j=1;j<Constants.INTS_PER_INODE;j++){
+						if (valid==false) { break; } //reached end of dFile
+						if (iblocks[j]<Constants.DATA_REGION || iblocks[j]>=Constants.NUM_OF_BLOCKS){ //invalid blocks, truncate file
+							valid=false;
+							break;
+						}
+
+						boolean freed=free_data_blocks.remove(iblocks[j]);
+
+						if (!freed){ //block already used elsewhere
+							valid=false;
+							break;
+						}
+
+						if (j==(Constants.INTS_PER_INODE-2)){
+							//singly indirect block
+							IntBuffer ib2=getBlockAsInts(iblocks[j]);
+							for (int k=0;k<Constants.INTS_PER_BLOCK;k++){
+								if (valid==false){break;}
+								int b=ib2.get(k);
+								if (b<Constants.DATA_REGION || b>=Constants.NUM_OF_BLOCKS){
+									valid=false;
+									break;
+								}
+								freed=free_data_blocks.remove(ib2.get(k));
+								if (!freed){
+									valid=false;
+									break;
+								}
+								fileBlocks++;
+							}
+						}
+						else if (j==(Constants.INTS_PER_INODE-1)){
+							//doubly indirect block
+							IntBuffer ib2=getBlockAsInts(iblocks[j]);
+							for (int k=0;k<Constants.INTS_PER_BLOCK;k++){
+								if (valid==false){break;}
+								int b=ib2.get(k);
+								if (b<Constants.DATA_REGION || b>=Constants.NUM_OF_BLOCKS){
+									valid=false;
+									break;
+								}
+								freed=free_data_blocks.remove(ib2.get(k));
+								if (!freed){
+									valid=false;
+									break;
+								}
+								IntBuffer ib3=getBlockAsInts(ib2.get(k));
+								for (int l=0;l<Constants.INTS_PER_BLOCK;l++){
+									if (valid==false){break;}
+									int b2=ib3.get(l);
+									if (b2<Constants.DATA_REGION || b2>=Constants.NUM_OF_BLOCKS){
+										valid=false;
+										break;
+									}
+									freed=free_data_blocks.remove(ib3.get(l));
+									if (!freed){
+										valid=false;
+										break;
+									}
+									fileBlocks++;
+								}
+							}
+						}
+						else {
+							//direct block
+							fileBlocks++;
+						}
+					} // end block map loop
+					int expectedBlocks=((iblocks[0]-1)/Constants.BLOCK_SIZE)+1;
+					if (valid==false || expectedBlocks>fileBlocks){
+						iblocks[0]=fileBlocks*Constants.BLOCK_SIZE;
+						ib.put(iblocks,(i*Constants.INTS_PER_INODE), Constants.INTS_PER_INODE); //make sure consistent inode
+					}
+				} // end used inodes
+			} // end inode loop
+			//update disk data of inode
+			ByteBuffer bb=ByteBuffer.allocate(Constants.BLOCK_SIZE);
+			bb.asIntBuffer().put(ib);
+			writeBlock(BID,bb.array(),0,Constants.BLOCK_SIZE);
+		} // end block loop
+	}
+	
+	private IntBuffer getBlockAsInts(int BID){
+		byte[] buffer=new byte[Constants.BLOCK_SIZE];
+		readBlock(BID,buffer,0,Constants.BLOCK_SIZE);
 		
-		
-		//TODO
-		
-		
-		
-		
+		ByteBuffer bb=ByteBuffer.wrap(buffer);
+		IntBuffer ib=bb.asIntBuffer();
+		return ib;
+	}
+	
+	private int getFID(int BID, int iOffset){
+		return (((BID-1)*Constants.INODES_PER_BLOCK)+iOffset+1);
+	}
+	private int getBID(int FID){
+		return ((FID-1) / Constants.INODES_PER_BLOCK) + 1;
+	}
+	//inode offset in block (in terms of inodes, not bytes)
+	private int getInodeOffset(int FID){
+		return (FID-1) % Constants.INODES_PER_BLOCK;
 	}
 
 	@Override
@@ -120,16 +241,16 @@ public class DFSd extends DFS {
 		fs.put(did, null);
 		
 		//get new inode from disk
+		int BID = getBID(FID);
+		int offset = getInodeOffset(FID);
+		
 		byte[] buffer=new byte[Constants.BLOCK_SIZE];
-		readInode(FID,buffer);
+		readBlock(BID,buffer,0,Constants.BLOCK_SIZE);
 
 		ByteBuffer bb=ByteBuffer.wrap(buffer);
 		
-		//inode offset in block (in terms of inodes, not bytes)
-		int offset = (FID-1) % inode_per_block;
-		
 		//set inode size=1
-		bb.putInt(1,(offset*ints_per_inode*intBytes));
+		bb.putInt((offset*Constants.INTS_PER_INODE*Constants.intBytes),1);
 		
 //		buffer=bb.array(); 
 		
@@ -139,60 +260,103 @@ public class DFSd extends DFS {
 
 	@Override
 	public synchronized void destroyDFile(DFileID dFID) {
-
-//		//get inode properties
-//		int offset = (FID-1) % inode_per_block;
-//		ByteBuffer bb=ByteBuffer.wrap(buffer);
-//		IntBuffer ib=bb.asIntBuffer();
-//		
-//		int[] ibuffer=new int[ints_per_inode]; //will contain single inode data
-//		ib.get(ibuffer, offset*ints_per_inode, ints_per_inode);
+		if (dFID.getDFileID()<1 || dFID.getDFileID()>=Constants.DATA_REGION){return;} //invalid dFID
+		int[] iblocks=fs.get(dFID);
+		if (iblocks==null){return;} //no such fileID in use
+		iblocks[0]=0;
 		
-		//TODO
+		for (int i=1;i<Constants.INTS_PER_INODE;i++){
+			if (iblocks[i]<Constants.DATA_REGION || iblocks[i]>=Constants.NUM_OF_BLOCKS){continue;}
+			
+			if (i==(Constants.INTS_PER_INODE-2)){
+				//singly indirect
+				IntBuffer ib2=getBlockAsInts(iblocks[i]);
+				for (int j=0;j<Constants.INTS_PER_BLOCK;j++){
+					int b=ib2.get(j);
+					if (b<Constants.DATA_REGION || b>=Constants.NUM_OF_BLOCKS){continue;}
+					free_data_blocks.add(b);
+				}
+			}
+			else if (i==(Constants.INTS_PER_INODE-1)){
+				//doubly indirect
+				IntBuffer ib2=getBlockAsInts(iblocks[i]);
+				for (int j=0;j<Constants.INTS_PER_BLOCK;j++){
+					IntBuffer ib3=getBlockAsInts(ib2.get(j));
+					for (int k=0;k<Constants.INTS_PER_BLOCK;k++){
+						int b=ib3.get(k);
+						if (b<Constants.DATA_REGION || b>=Constants.NUM_OF_BLOCKS){continue;}
+						free_data_blocks.add(b);
+					}
+				}
+			}
+			else {
+				//direct
+				int b=iblocks[i];
+				if (b<Constants.DATA_REGION || b>=Constants.NUM_OF_BLOCKS){continue;}
+				free_data_blocks.add(b);
+			}
+			iblocks[i]=0;
+		}
+		IntBuffer ib=IntBuffer.wrap(iblocks);
+		ByteBuffer bb=ByteBuffer.allocate(Constants.INODE_SIZE);
+		bb.asIntBuffer().put(ib);
+		writeInode(dFID.getDFileID(),bb.array()); //zero out the inode in memory
+		fs.remove(dFID);
+		free_inodes.add(dFID.getDFileID());
 	}
 	
-	private void readInode(Integer FID, byte[] buffer){
-		int BID = ((FID-1) / inode_per_block) + 1;
-		
+	private int readBlock(Integer BID, byte[] buffer, int startOffset, int count){
 		DBuffer d=cache.getBlock(BID);
 		
 		if (!d.checkValid()){
-			d.waitValid();
+			d.waitValid(); //wait for fetch to finish
 		}
-		d.read(buffer, 0, Constants.BLOCK_SIZE);
+		int bytes=d.read(buffer, startOffset, count);
 		cache.releaseBlock(d);
+		return bytes;
 		
 	}
 	
-	private void writeInode(Integer FID, byte[] buffer){
-		int BID = ((FID-1) / inode_per_block) + 1;
-		int offset = (FID-1) % inode_per_block;
-		
+	private void writeBlock(Integer BID, byte[] buffer, int startOffset, int count){
 		DBuffer d=cache.getBlock(BID);
 		
 		if (!d.checkClean()){
-			d.waitClean();
+			d.waitClean(); //wait for fetch to finish
 		}
-		d.write(buffer, 0, ((offset+1)*Constants.INODE_SIZE));
+		d.write(buffer, startOffset, count);
 		cache.releaseBlock(d);
+	}
+	
+	private void writeInode(Integer FID, byte[] buffer){
+		int BID = getBID(FID);
+		int offset = getInodeOffset(FID);
+		
+		writeBlock(BID,buffer,0,((offset+1)*Constants.INODE_SIZE));
 	}
 
 	@Override
 	public int read(DFileID dFID, byte[] buffer, int startOffset, int count) {
-		// TODO Auto-generated method stub
+		if (dFID.getDFileID()<1 || dFID.getDFileID()>=Constants.DATA_REGION){return -1;} //invalid dFID
+		int[] iblocks=fs.get(dFID);
+		if (iblocks==null){return -1;} //no such fileID in use
+		
+		int isize=iblocks[0];
+		//TODO
 		return 0;
 	}
 
 	@Override
 	public int write(DFileID dFID, byte[] buffer, int startOffset, int count) {
-		// TODO Auto-generated method stub
+		if (dFID.getDFileID()<1 || dFID.getDFileID()>=Constants.DATA_REGION){return -1;} //invalid dFID
+		int[] iblocks=fs.get(dFID);
+		if (iblocks==null){return -1;} //no such fileID in use
+		//TODO
 		return 0;
 	}
 
 	@Override
 	public int sizeDFile(DFileID dFID) {
-		// TODO Auto-generated method stub
-		return 0;
+		return fs.get(dFID)[0];
 	}
 
 	@Override

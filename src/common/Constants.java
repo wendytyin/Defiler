@@ -20,6 +20,19 @@ public class Constants {
 	public static final int MAX_FILE_SIZE = BLOCK_SIZE*500; // Constraint on the max file size
 
 	public static final int MAX_DFILES = 512; // For recycling DFileIDs
+	
+	
+/*
+ * For use in DFS
+ */
+	public static final int intBytes=4;
+	
+	public static final int INODES_PER_BLOCK=BLOCK_SIZE/INODE_SIZE;
+	public static final int DATA_REGION=((MAX_DFILES-1)/INODES_PER_BLOCK)+2;
+	public static final int INTS_PER_INODE=INODE_SIZE/intBytes;
+	public static final int INTS_PER_BLOCK=BLOCK_SIZE/intBytes;
+	
+	
 
 	/* DStore Operation types */
 	public enum DiskOperationType {

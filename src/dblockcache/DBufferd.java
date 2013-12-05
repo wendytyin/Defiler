@@ -25,6 +25,9 @@ public class DBufferd extends DBuffer {
 		myBuffer=new byte[Constants.BLOCK_SIZE];
 	}
 	
+	/*
+	 * Rules: you must hold the buffer to call any of the methods
+	 */
 	public void hold(){
 		busy=true;
 	}
@@ -112,13 +115,13 @@ public class DBufferd extends DBuffer {
 
 	@Override
 	public int write(byte[] buffer, int startOffset, int count) {
-		if (valid){
+		if (clean){
 			if (startOffset>=Constants.BLOCK_SIZE){return -1;}
 			if (count>=Constants.BLOCK_SIZE){count=Constants.BLOCK_SIZE;}
 			for (int i=0;i<count;i++){
 				myBuffer[i]=buffer[i+startOffset]; //copy into buffer
 			}
-		} else {return -1;} //invalid data
+		} else {return -1;} //was dirty, need to push first
 		clean=false;
 		return count;
 	}
