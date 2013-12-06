@@ -86,7 +86,7 @@ DFS
 	However, a user can request an invalid DFileID through read() or write(). DFS will return -1.
 	- The size of a file does not include the number of bytes of metadata. It only records size of the data. 
 	- If the size recorded in an inode is smaller than the total number of blocks allotted, DFS will ignore the later blocks, recording them as "free" blocks which may be overwritten. The recorded size does not change unless a single write to the file is larger than the current size. 
-	- If the size recorded in an inode is larger than the total number of blocks allotted, DFS will round the file size to (BLOCK_SIZE*number of blocks used). DFS.sizeDFile() will likely return an incorrect number (that multiple of BLOCK_SIZE) until read() is called, at which point DFS add up the number of bytes read into each buffer and updates the file size. 
+	- If the size recorded in an inode is larger than the total number of blocks allotted, DFS will round the file size to (BLOCK_SIZE*number of blocks used).
 	- If a blockID appears in more than one inode, the inode with lower DFileID retains the block and the later inode is truncated by changing the size to (BLOCK_SIZE*number of blocks up to contended block). E.g. the 3rd direct block in inode 6 is already used in inode 5; inode 6 size=BLOCK_SIZE*2.
 	- If a blockID is invalid (outside of data blocks region), the file is truncated (see previous).
 

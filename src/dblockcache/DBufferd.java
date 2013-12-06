@@ -104,7 +104,6 @@ public class DBufferd extends DBuffer {
 	@Override
 	public int read(byte[] buffer, int startOffset, int count) {
 		if (valid){
-			if (startOffset>=Constants.BLOCK_SIZE){return -1;}
 			if (count>=Constants.BLOCK_SIZE){count=Constants.BLOCK_SIZE;}
 			for (int i=0;i<count;i++){
 				buffer[i+startOffset]=myBuffer[i]; //copy into buffer
@@ -116,7 +115,6 @@ public class DBufferd extends DBuffer {
 	@Override
 	public int write(byte[] buffer, int startOffset, int count) {
 		if (clean){
-			if (startOffset>=Constants.BLOCK_SIZE){return -1;}
 			if (count>=Constants.BLOCK_SIZE){count=Constants.BLOCK_SIZE;}
 			for (int i=0;i<count;i++){
 				myBuffer[i]=buffer[i+startOffset]; //copy into buffer
