@@ -42,7 +42,9 @@ public class DFSd extends DFS {
 	private DBufferCache cache;
 	private VirtualDisk disk;
 	
+	
 	private HashMap<DFileID,int[]> fs;
+	
 	private TreeSet<Integer> free_data_blocks; //block ids 
 	private TreeSet<Integer> free_inodes; // file ids
 	
@@ -96,7 +98,10 @@ public class DFSd extends DFS {
 		cache=DBufferCached.instance(Constants.NUM_OF_CACHE_BLOCKS, disk);
 		
 		//initialize metadata
+		
+		
 		fs=new HashMap<DFileID,int[]>();
+		
 		free_data_blocks=new TreeSet<Integer>();
 		free_inodes=new TreeSet<Integer>();
 		for (int i=Constants.DATA_REGION;i<Constants.NUM_OF_BLOCKS;i++){
@@ -142,7 +147,8 @@ public class DFSd extends DFS {
 					ib.get(iblocks, 0, Constants.INTS_PER_INODE); //read out inode into int array
 
 					fs.put(new DFileID(FID), iblocks);
-
+			
+					
 					int fileBlocks=0;
 					int expectedBlocks=getBlockCount(iblocks[0]);
 
@@ -258,8 +264,9 @@ public class DFSd extends DFS {
 		DFileID did=new DFileID(FID);
 
 		int[] blocks=new int[Constants.INTS_PER_INODE];
-		fs.put(did, blocks);
 		
+		fs.put(did, blocks);
+
 		//get new inode from disk
 		int BID = getBID(FID);
 		int offset = getInodeOffset(FID);
@@ -329,7 +336,12 @@ public class DFSd extends DFS {
 	@Override
 	public synchronized void destroyDFile(DFileID dFID) {
 		if (dFID.getDFileID()<1 || dFID.getDFileID()>=Constants.DATA_REGION){return;} //invalid dFID
-		int[] iblocks=fs.get(dFID);
+				
+		DFileID key = new DFileID(dFID.getDFileID());//'0' for initialization
+		
+		int[] iblocks=fs.get((DFileID)key);
+		
+		
 		if (iblocks==null){return;} //no such fileID in use
 		
 		int fileBlocks=0;
@@ -356,7 +368,10 @@ public class DFSd extends DFS {
 			else {
 				//direct
 				int tmp=destroyDFile(iblocks[i],(expectedBlocks-fileBlocks),0);
-				//TODO: CHECK TMP VALUE>0
+
+				if(tmp<0){
+					break;
+				}
 				fileBlocks+=tmp;
 			}
 			iblocks[i]=0; //clear out inode data
@@ -525,7 +540,9 @@ public class DFSd extends DFS {
 			writeInode(dFID.getDFileID(),bb.array());
 			
 			synchronized(this){
+			
 			fs.put(dFID, iblocks); 
+
 			}
 			
 		}
@@ -588,13 +605,13 @@ public class DFSd extends DFS {
 	@Override
 	public List<DFileID> listAllDFiles() {
 		Set<DFileID> tmp=fs.keySet();
-		
+
 		//test...to del
 		for(DFileID id:tmp){
-			System.out.print(id.getDFileID() + ", ");
+			System.out.print(id + ", ");
 		}
 		System.out.println();
-		
+				
 			
 		return new ArrayList<DFileID>(tmp);
 	}
