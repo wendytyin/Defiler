@@ -117,8 +117,6 @@ public class DFSd extends DFS {
 			//test
 			System.out.println("entered buildmetadata, BID = " + BID);
 			IntBuffer ib=getBlockAsInts(BID);
-
-			ib.mark(); //mark index 0
 			
 				
 			//loop through inodes
@@ -140,6 +138,7 @@ public class DFSd extends DFS {
 					//test
 					System.out.println("at this get block, offset is " + (i*Constants.INTS_PER_INODE));
 					
+					ib.position((i*Constants.INTS_PER_INODE));
 					ib.get(iblocks, 0, Constants.INTS_PER_INODE); //read out inode into int array
 
 					fs.put(new DFileID(FID), iblocks);
@@ -191,10 +190,10 @@ public class DFSd extends DFS {
 						ib.put(iblocks,0, Constants.INTS_PER_INODE); //make sure consistent inode
 					}
 				} // end used inodes
-				
 			} // end inode loop
 			//update disk data of inode
 			ByteBuffer bb=ByteBuffer.allocate(Constants.BLOCK_SIZE);
+			ib.reset(); //put position of buffer back at zero
 			bb.asIntBuffer().put(ib);
 			writeBlock(BID,bb.array(),0,Constants.BLOCK_SIZE);
 		} // end block loop
@@ -470,11 +469,12 @@ public class DFSd extends DFS {
 
 	
 	private synchronized void addNewBlocks(DFileID dfid, int increase){
-		
+		if (increase==0){
+			return;
+		}
 		int lastBlock;
 		Integer bid=free_data_blocks.ceiling(Constants.DATA_REGION);
-		
-		//TODO
+		//TODO:
 	}
 	
 	@Override
@@ -507,9 +507,7 @@ public class DFSd extends DFS {
 			}
 			
 			//add blocks to expand file
-			if (increase>0){
-				addNewBlocks(dFID, increase);
-			}
+			addNewBlocks(dFID, increase);
 		}
 		//TODO: WRITE DATA TO DISK
 		return 0;
@@ -583,6 +581,7 @@ public class DFSd extends DFS {
 		
 		ByteBuffer bb=ByteBuffer.wrap(buffer);
 		IntBuffer ib=bb.asIntBuffer();
+		ib.mark(); //mark index 0
 		return ib;
 	}
 	private int getFID(int BID, int iOffset){
