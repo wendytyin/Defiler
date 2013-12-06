@@ -108,12 +108,10 @@ public class DFSd extends DFS {
 			//test
 			System.out.println("entered buildmetadata, BID = " + BID);
 			IntBuffer ib=getBlockAsInts(BID);
-			
-			//test
-			System.out.println("After getBlock as ints");
-				
+							
 			//loop through inodes
 			for (int i=0;i<Constants.INODES_PER_BLOCK;i++){
+				
 				if (ib.get((i*Constants.INTS_PER_INODE))>0){ //used inode
 					
 					//test	
@@ -126,8 +124,12 @@ public class DFSd extends DFS {
 					free_inodes.remove(FID);
 
 					//get the block map, put it in our map
-					int[] iblocks=new int[Constants.INTS_PER_BLOCK];
-					ib.get(iblocks, (i*Constants.INTS_PER_BLOCK), Constants.INTS_PER_BLOCK); //read out inode into int array
+					int[] iblocks=new int[Constants.INTS_PER_INODE];
+					
+					//test
+					System.out.println("at this get block, offset is " + (i*Constants.INTS_PER_INODE));
+					
+					ib.get(iblocks, 0, Constants.INTS_PER_INODE); //read out inode into int array
 					fs.put(new DFileID(FID), iblocks);
 
 					int fileBlocks=0;
@@ -171,11 +173,12 @@ public class DFSd extends DFS {
 						}
 					} // end block map loop
 					
-					if (expectedBlocks>fileBlocks){
+					if (expectedBlocks>fileBlocks && iblocks[1]!=0){
 						iblocks[0]=fileBlocks*Constants.BLOCK_SIZE;
 						ib.put(iblocks,(i*Constants.INTS_PER_INODE), Constants.INTS_PER_INODE); //make sure consistent inode
 					}
 				} // end used inodes
+				
 			} // end inode loop
 			//update disk data of inode
 			ByteBuffer bb=ByteBuffer.allocate(Constants.BLOCK_SIZE);
@@ -239,7 +242,8 @@ public class DFSd extends DFS {
 		//update DFS data structures
 		free_inodes.remove(FID);
 		DFileID did=new DFileID(FID);
-		fs.put(did, null);
+		int [] arr = new int[Constants.INTS_PER_INODE];
+		fs.put(did, arr);
 		
 		//get new inode from disk
 		int BID = getBID(FID);
@@ -432,10 +436,12 @@ public class DFSd extends DFS {
 	@Override
 	public List<DFileID> listAllDFiles() {
 		Set<DFileID> tmp=fs.keySet();
+		
 		//test...to del
 		for(DFileID id:tmp){
-			System.out.println(id.getDFileID());
+			System.out.print(id.getDFileID() + ", ");
 		}
+		System.out.println();
 		
 			
 		return new ArrayList<DFileID>(tmp);
