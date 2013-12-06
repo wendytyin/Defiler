@@ -131,7 +131,7 @@ public class DFSd extends DFS {
 					fs.put(new DFileID(FID), iblocks);
 
 					int fileBlocks=0;
-					int expectedBlocks=iblocks[0]/Constants.BLOCK_SIZE;
+					int expectedBlocks=getBlockCount(iblocks[0]);
 
 					//special case of empty file
 					if (iblocks[0]==1 && iblocks[1]==0){ 
@@ -314,7 +314,7 @@ public class DFSd extends DFS {
 		if (iblocks==null){return;} //no such fileID in use
 		
 		int fileBlocks=0;
-		int expectedBlocks=iblocks[0]/Constants.BLOCK_SIZE;
+		int expectedBlocks=getBlockCount(iblocks[0]);
 		
 		iblocks[0]=0; //clear out inode size
 		
@@ -358,7 +358,7 @@ public class DFSd extends DFS {
 		if (iblocks==null){return -1;} //no such fileID in use
 		
 		int iSize=iblocks[0];
-		int expectedBlocks=iSize/Constants.BLOCK_SIZE;
+		int expectedBlocks=getBlockCount(iSize);
 		
 		
 		//TODO: LOOP THRU BLOCKS BELONGING TO FILE, READ THEM OUT.
@@ -441,6 +441,14 @@ public class DFSd extends DFS {
 		return new ArrayList<DFileID>(tmp);
 	}
 
+	//the number of blocks something of size byteNumber would take up
+	private int getBlockCount(int byteNumber){
+		int tmp=byteNumber/Constants.BLOCK_SIZE;
+		if ((byteNumber%Constants.BLOCK_SIZE)>0){
+			tmp+=1;
+		}
+		return tmp;
+	}
 	private IntBuffer getBlockAsInts(int BID){
 		byte[] buffer=new byte[Constants.BLOCK_SIZE];
 		readBlock(BID,buffer,0,Constants.BLOCK_SIZE);
@@ -462,9 +470,8 @@ public class DFSd extends DFS {
 
 
 	@Override
-	public void sync() {
-		// TODO Auto-generated method stub
-		
+	public synchronized void sync() {
+		cache.sync();
 	}
 
 }
