@@ -8,11 +8,11 @@
 
 	Name1: Wendy Yin	// Edit this accordingly
 	NetId1: wty3	 	// Edit
-	Time spent: 9 hours 	// Edit 
+	Time spent: 20 hours 	// Edit 
 
 	Name2: Helena Wu 	// Edit this accordingly
 	NetId2: hw87	 	// Edit
-	Time spent: 9 hours 	// Edit 
+	Time spent: 20 hours 	// Edit 
 
 /******************
  * Files to submit
