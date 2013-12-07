@@ -7,8 +7,6 @@ import java.util.LinkedList;
 import common.Constants.DiskOperationType;
 import dblockcache.DBuffer;
 import dblockcache.DBufferObj;
-import dfs.DFSd;
-
 
 public class VirtualDiskd extends VirtualDisk implements Runnable {
 	

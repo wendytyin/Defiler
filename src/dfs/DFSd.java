@@ -104,6 +104,12 @@ public class DFSd extends DFS {
 		System.out.println("File system initialized.");
 	}
 
+	/**
+	 * Only called at initialization
+	 * Scans inode region and builds mapping of DFileID->block map per inode
+	 * Checks inodes for valid file sizes and no block conflicts
+	 * Removes used blocks and fileIDs that appear in inodes from their free lists (sets free_inodes and free_data_blocks)
+	 */
 	private void buildMetadata() {
 		//loop through blocks that contain inodes
 		for (int BID=1;BID<Constants.DATA_REGION;BID++){
@@ -337,7 +343,6 @@ public class DFSd extends DFS {
 			int fileBlocks=0;
 			int expectedBlocks=getBlockCount(iblocks[0]);
 
-
 			iblocks[0]=0; //clear out inode size
 
 			for (int i=1;i<Constants.INTS_PER_INODE;i++){
@@ -432,7 +437,6 @@ public class DFSd extends DFS {
 		return 0; //should be impossible unless inodes changed
 	}
 
-	//assumes metadata is all valid
 	@Override
 	public int read(DFileID dFID, byte[] buffer, int startOffset, int count) {
 		if (dFID.getDFileID()<1 || dFID.getDFileID()>=Constants.DATA_REGION){return -1;} //invalid dFID
@@ -510,7 +514,10 @@ public class DFSd extends DFS {
 		return index;
 	}
 
-	//updates block map in iblocks and fs, writes the changes back to disk
+	/**
+	 * updates block map in iblocks and fs, writes the changes back to disk
+	 * @return successful disk write
+	 */
 	private boolean putNewDirectBlockPtr(DFileID dFID, int[] iblocks, int ix){
 		//iblocks contains entire inode data
 		synchronized(this){
@@ -534,7 +541,7 @@ public class DFSd extends DFS {
 		IntBuffer ib=getBlockAsInts(blockID);
 		ib.put(ix, data);
 
-		ByteBuffer bb=ByteBuffer.allocate(Constants.INODE_SIZE);
+		ByteBuffer bb=ByteBuffer.allocate(Constants.BLOCK_SIZE);
 		bb.asIntBuffer().put(ib); 
 		int suc=writeBlock(blockID, bb.array(), 0, Constants.BLOCK_SIZE);
 		if (suc<1){return false;}
@@ -659,11 +666,8 @@ public class DFSd extends DFS {
 							}
 						}
 					} //end for loop
-					//write inode back to disk
-					//				iblocks=fs.get(dFID);
-				
 				} //end increase
-				
+				//write inode back to disk
 				iblocks[0]=count;
 				IntBuffer ib=IntBuffer.wrap(iblocks);
 				ByteBuffer bb=ByteBuffer.allocate(Constants.INODE_SIZE);
@@ -671,7 +675,7 @@ public class DFSd extends DFS {
 				writeInode(dFID.getDFileID(),bb.array());
 				updateFS(dFID,ib.array());
 			}
-
+			
 			//write data to file
 			for (int i=1;i<Constants.INTS_PER_INODE;i++){
 				if (count<=0){
@@ -734,6 +738,10 @@ public class DFSd extends DFS {
 	private int writeBlock(Integer BID, byte[] buffer, int startOffset, int count){
 		DBuffer d=cache.getBlock(BID);
 
+		if (!d.checkValid()){
+			d.checkValid();
+		}
+		
 		if (!d.checkClean()){
 			d.waitClean(); //wait for push to finish
 		}
@@ -785,7 +793,7 @@ public class DFSd extends DFS {
 		}
 		System.out.println();
 
-
+		
 		return new ArrayList<DFileID>(tmp);
 	}
 	
