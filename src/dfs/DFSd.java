@@ -517,7 +517,7 @@ public class DFSd extends DFS {
 
 	/**
 	 * updates block map in iblocks and fs, writes the changes back to disk
-	 * @return successful disk write
+	 * @return bytes of data written
 	 */
 	private int putNewDirectBlockPtr(DFileID dFID, int[] iblocks, int ix){
 		//iblocks contains entire inode data
@@ -645,34 +645,34 @@ public class DFSd extends DFS {
 						if (ix[1]==-1){ //direct, need to update inode
 							suc=putNewDirectBlockPtr(dFID,iblocks,ix[0]);
 							if (suc<0){break;}
-							actualExpansion+=suc;
+							actualExpansion+=Constants.BLOCK_SIZE;
 						}
 						else {
 							if (ix[2]==-1){ //singly indirect
 								if (ix[1]==0){ //need to update inode by adding branch
 									suc=putNewDirectBlockPtr(dFID,iblocks,ix[0]);
 									if (suc<0){break;}
-									actualExpansion+=suc;
+//									actualExpansion+=suc;
 								}
 								suc=putNewIndirectBlockPtr(iblocks[ix[0]], ix[1]);
 								if (suc<0){break;}
-								actualExpansion+=suc;
+								actualExpansion+=Constants.BLOCK_SIZE;
 							}
 							else { //doubly indirect
 								if (ix[1]==0 && ix[2]==0){ //update inode
 									suc=putNewDirectBlockPtr(dFID,iblocks,ix[0]);
 									if (suc<0){break;}
-									actualExpansion+=suc;
+//									actualExpansion+=suc;
 								}
 								if (ix[2]==0){ //update first level
 									suc=putNewIndirectBlockPtr(iblocks[ix[0]], ix[1]);
 									if (suc<0){break;}
-									actualExpansion+=suc;
+//									actualExpansion+=suc;
 								}
 								IntBuffer ib=getBlockAsInts(iblocks[ix[0]]);
 								suc=putNewIndirectBlockPtr(ib.get(ix[1]), ix[2]);
 								if (suc<0){break;}
-								actualExpansion+=suc;
+								actualExpansion+=Constants.BLOCK_SIZE;
 							}
 						}
 					} //end for loop
