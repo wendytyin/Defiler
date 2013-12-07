@@ -1,6 +1,9 @@
 package Tests;
 
+import java.io.File;
+import java.io.FileNotFoundException;
 import java.io.UnsupportedEncodingException;
+import java.util.Scanner;
 
 import common.DFileID;
 import dfs.DFSd;
@@ -8,7 +11,7 @@ import dfs.DFSd;
 public class Test {
 	
 	
-	public static void main(String[] args) throws UnsupportedEncodingException{
+	public static void main(String[] args) throws UnsupportedEncodingException, FileNotFoundException{
 		
 		DFSd Filer = DFSd.instance();
 		Filer.init();
@@ -40,16 +43,18 @@ public class Test {
 		
 	//	c1.sync();
 	//	c1.listAllDFiles();
-		byte[] buffer = new byte[10];
-		String msg = "hello";
-		buffer = msg.getBytes();
-		c1.write(id, buffer, 0, buffer.length);
-		c1.sync();
+
+//		String msg = new Scanner(new File("src/Tests/Long_text(100KB)"), "UTF-8").useDelimiter("\\A").next();
+//		String msg = "hello";
+//		byte[] buffer = new byte[msg.length()];
+//		buffer = msg.getBytes();
+//		c1.write(id, buffer, 0, buffer.length);
+//		c1.sync();
+//		
+//		System.out.println("after write, size of filer is: " + Filer.sizeDFile(id));
+//		
 		
-		System.out.println("after write, size of filer is: " + Filer.sizeDFile(id));
-		
-		
-		byte[] buf2 = new byte[10];
+		byte[] buf2 = new byte[100];
 		c1.read(id, buf2, 0,buf2.length);
 		
 		
@@ -57,7 +62,17 @@ public class Test {
 		
 		System.out.println("file content is = " + str);
 		
+		c1.destroyFile(id);
+		c1.sync();
+		c1.listAllDFiles();
 		
+		buf2 = new byte[100];
+		int status = c1.read(id, buf2, 0,buf2.length);
+		
+		
+		str = new String(buf2,"UTF-8");
+		
+		System.out.println("file content is after destroy = " + str);
 		
 		
 	}

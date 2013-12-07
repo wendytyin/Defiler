@@ -741,10 +741,11 @@ public class DFSd extends DFS {
 		if (!d.checkValid()){
 			d.checkValid();
 		}
-		
+
 		if (!d.checkClean()){
 			d.waitClean(); //wait for push to finish
 		}
+
 		int bytes=d.write(buffer, startOffset, count);
 		cache.releaseBlock(d);
 		return bytes;

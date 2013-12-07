@@ -11,6 +11,7 @@ public class Client implements Runnable {
 	
 	
 	public Client(String name, DFSd Filer){
+		
 		this.name = name;
 		this.Filer = Filer;
 	}
