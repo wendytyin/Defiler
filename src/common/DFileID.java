@@ -39,4 +39,29 @@ public class DFileID {
 	public String toString(){
 		return _dFID+"";
 	}
+
+	/**
+	 * Calculates DFileID number from the inode's block id and offset within the block
+	 * @param BID block ID
+	 * @param iOffset inode offset
+	 * @return file ID
+	 */
+	public static int getFID(int BID, int iOffset){
+		return (((BID-1)*Constants.INODES_PER_BLOCK)+iOffset+1);
+	}
+	/**
+	 * @param FID file ID
+	 * @return block ID (offset within byte array in terms of blocks, not bytes)
+	 */
+	public static int getBID(int FID){
+		return ((FID-1) / Constants.INODES_PER_BLOCK) + 1;
+	}
+	/**
+	 * @param FID file ID
+	 * @return inode offset within the block in terms of inodes (not bytes)
+	 */
+	public static int getInodeOffset(int FID){
+		return (FID-1) % Constants.INODES_PER_BLOCK;
+	}
+
 }
