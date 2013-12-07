@@ -525,7 +525,7 @@ public class DFSd extends DFS {
 
 	/**
 	 * updates block map in iblocks and fs, writes the changes back to disk
-	 * @return successful disk write
+	 * @return bytes of data written
 	 */
 	private int putNewDirectBlockPtr(DFileID dFID, int[] iblocks, int ix){
 		//iblocks contains entire inode data
@@ -661,6 +661,7 @@ public class DFSd extends DFS {
 									suc=putNewDirectBlockPtr(dFID,iblocks,ix[0]);
 									if (suc<0){break;}
 									//actualExpansion+=suc;
+
 								}
 								suc=putNewIndirectBlockPtr(iblocks[ix[0]], ix[1]);
 								if (suc<0){break;}
@@ -671,11 +672,13 @@ public class DFSd extends DFS {
 									suc=putNewDirectBlockPtr(dFID,iblocks,ix[0]);
 									if (suc<0){break;}
 									//actualExpansion+=suc;
-								}
+
 								if (ix[2]==0){ //update first level
 									suc=putNewIndirectBlockPtr(iblocks[ix[0]], ix[1]);
 									if (suc<0){break;}
+
 									//actualExpansion+=suc;
+
 								}
 								IntBuffer ib=getBlockAsInts(iblocks[ix[0]]);
 								suc=putNewIndirectBlockPtr(ib.get(ix[1]), ix[2]);
@@ -696,6 +699,7 @@ public class DFSd extends DFS {
 				bb.asIntBuffer().put(ib);
 				writeInode(dFID.getDFileID(),bb.array());
 				updateFS(dFID,ib.array());
+				}
 			}
 
 			//write data to file
