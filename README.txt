@@ -13,6 +13,12 @@
 	Name2: Helena Wu 	// Edit this accordingly
 	NetId2: hw87	 	// Edit
 	Time spent: 25 hours 	// Edit 
+	
+	*
+	*
+	Both of us have completed the class evaluation on ACES.
+	*
+	*
 
 /******************
  * Files to submit
@@ -49,7 +55,7 @@ ALL CONCRETE CLASSES ARE NAMED <ABSTRACT SUPERCLASS NAME>d.java.
 CONSTANTS
 	INODE_SIZE must be a whole number multiple (>=3) of size of integer in bytes (4 bytes).
 	Valid DFileIDs span [1-MAX_DFILES]. The inode region is fixed according to Constants.MAX_DFILES.
-	BlockIDs span [(((Constants.MAX_DFILES-1)/INODES_PER_BLOCK)+2) - (NUM_OF_CACHE_BLOCKS-1)].
+	BlockIDs span [(((Constants.MAX_DFILES-1)/INODES_PER_BLOCK)+2) - (NUM_OF_BLOCKS-1)].
 	BID 0 is left empty, and is available for future metadata use.
 	
 	DFileIDs are calculated using this equation:
@@ -177,6 +183,14 @@ That thread waits on the queue for requests, and when a request is submitted by 
 We separated the portion that runs the request from the portion that removes the request, so that DBuffers may continue submitting requests to the queue while the VirtualDisk thread does file operations. 
 
 
+The code is not as efficient as it could be. Wherever there was a choice, we chose to do things slower and with more checks for file validity and safety, rather than making the code efficient.
+For example, in DFSd.write, the write method first checks if the amount to write into the file is larger than the current file size, and if so, updates the block maps completely before writing any data into the file. 
+This could have been combined together, but the code would have been harder to maintain and less likely to recover old information after a crash. 
+The expansion of the block map adds in all the new data blocks before updating the recorded file size, and pushes the information to DBuffer (and disk) after each new block is added, keeping track of the return value of each DBuffer.write to make sure it has the right number of added on bytes that it thinks it has.
+This ensures that if the file system runs out of blocks during this file expansion, the recorded file size matches the number of blocks actually added, instead of overestimating the amount (which is a harder problem to deal with than underestimating the amount because of the number of checks needed, see Rules section above). 
+If the file system crashes during the file expansion, it will also recover the old file data before the write happened (the previous file size has not been changed, and the blocks already allocated in the map will be returned to the free_data_blocks set to be recycled). 
+
+
 /************************
  * Feedback on the lab
  ************************/
@@ -184,7 +198,12 @@ We separated the portion that runs the request from the portion that removes the
 /*
  * Any comments/questions/suggestions/experiences that you would help us to
  * improve the lab.
- * */
+ * 
+ */
+
+Update the files on website so instance variables in abstract superclasses not private, are protected and accessible.
+DFileID should implement hashCode if it implements equals, code on website did not implement hashCode.
+
 
 /************************
  * References
@@ -197,3 +216,7 @@ We separated the portion that runs the request from the portion that removes the
  
  GoF book (Design Patterns: Elements of Reusable Object-Oriented Software)
  OSTEP readings
+ Javadocs
+ Stack Overflow for the DFileID hashCode/equals issue (and how to get Eclipse to implement those functions for you).
+ 
+ 

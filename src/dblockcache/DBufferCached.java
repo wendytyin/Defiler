@@ -81,7 +81,7 @@ public class DBufferCached extends DBufferCache {
 	}
 
 	@Override
-	public void sync() {
+	public synchronized void sync() {
 		for (DBuffer d: bufmap.values()){
 			synchronized(d){
 				while (d.isBusy()){

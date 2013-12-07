@@ -20,13 +20,6 @@ import dblockcache.DBuffer;
 import dblockcache.DBufferCache;
 import dblockcache.DBufferCached;
 
-
-/*
- * TODO: 
- * -DEAL WITH SYNCHRONIZATION ISSUES ON SETS AND MAP
- * 
- */
-
 public class DFSd extends DFS {
 
 	private static DFSd _instance;
@@ -526,7 +519,7 @@ public class DFSd extends DFS {
 	 * updates block map in iblocks and fs, writes the changes back to disk
 	 * @return successful disk write
 	 */
-	private boolean putNewDirectBlockPtr(DFileID dFID, int[] iblocks, int ix){
+	private int putNewDirectBlockPtr(DFileID dFID, int[] iblocks, int ix){
 		//iblocks contains entire inode data
 		synchronized(this){
 			Integer data=free_data_blocks.ceiling(Constants.DATA_REGION);
@@ -538,12 +531,12 @@ public class DFSd extends DFS {
 		ByteBuffer bb=ByteBuffer.allocate(Constants.INODE_SIZE);
 		bb.asIntBuffer().put(ib); 
 		int suc=writeInode(dFID.getDFileID(),bb.array()); //rewrite inode
-		if (suc<1){return false;}
+		if (suc<0){return -1;}
 		updateFS(dFID,iblocks);
-		return true;
+		return suc;
 	}
 
-	private synchronized boolean putNewIndirectBlockPtr(int blockID, int ix){
+	private synchronized int putNewIndirectBlockPtr(int blockID, int ix){
 		Integer data=free_data_blocks.ceiling(Constants.DATA_REGION);
 		free_data_blocks.remove(data);
 		IntBuffer ib=getBlockAsInts(blockID);
@@ -552,8 +545,8 @@ public class DFSd extends DFS {
 		ByteBuffer bb=ByteBuffer.allocate(Constants.BLOCK_SIZE);
 		bb.asIntBuffer().put(ib); 
 		int suc=writeBlock(blockID, bb.array(), 0, Constants.BLOCK_SIZE);
-		if (suc<1){return false;}
-		return true;
+		if (suc<0){return -1;}
+		return suc;
 	}
 	/**
 	 * Recursively write block data
@@ -631,7 +624,7 @@ public class DFSd extends DFS {
 				if(oldSize==1 && iblocks[1]==0){
 					oldSize=0;
 				}
-				
+
 				int remainingSpace=Constants.BLOCK_SIZE-(oldSize%Constants.BLOCK_SIZE);
 				if (remainingSpace==Constants.BLOCK_SIZE){remainingSpace=0;}
 				int tmp=count-oldSize;
@@ -642,43 +635,52 @@ public class DFSd extends DFS {
 				}
 				int oldBlockSize=getBlockCount(oldSize);
 
-				//TODO: MORE SMARTER SUCCESS CHECK (add up amounts, write partial)
-
 				//add blocks to expand file
 				if (increase>0){
+					int actualExpansion=0; //number of bytes we successfully added to the file
 					for (int i=0;i<increase;i++){
 						oldBlockSize+=1;
 						int[] ix=calculateIndices(oldBlockSize);
-						boolean suc=true;
+						int suc=0;
 						if (ix[1]==-1){ //direct, need to update inode
 							suc=putNewDirectBlockPtr(dFID,iblocks,ix[0]);
-							if (!suc){return -1;}
+							if (suc<0){break;}
+							actualExpansion+=suc;
 						}
 						else {
 							if (ix[2]==-1){ //singly indirect
 								if (ix[1]==0){ //need to update inode by adding branch
 									suc=putNewDirectBlockPtr(dFID,iblocks,ix[0]);
-									if (!suc){return -1;}
+									if (suc<0){break;}
+									actualExpansion+=suc;
 								}
 								suc=putNewIndirectBlockPtr(iblocks[ix[0]], ix[1]);
-								if (!suc){return -1;}
+								if (suc<0){break;}
+								actualExpansion+=suc;
 							}
 							else { //doubly indirect
 								if (ix[1]==0 && ix[2]==0){ //update inode
 									suc=putNewDirectBlockPtr(dFID,iblocks,ix[0]);
-									if (!suc){return -1;}
+									if (suc<0){break;}
+									actualExpansion+=suc;
 								}
 								if (ix[2]==0){ //update first level
 									suc=putNewIndirectBlockPtr(iblocks[ix[0]], ix[1]);
-									if (!suc){return -1;}
+									if (suc<0){break;}
+									actualExpansion+=suc;
 								}
 								IntBuffer ib=getBlockAsInts(iblocks[ix[0]]);
 								suc=putNewIndirectBlockPtr(ib.get(ix[1]), ix[2]);
-								if (!suc){return -1;}
+								if (suc<0){break;}
+								actualExpansion+=suc;
 							}
 						}
 					} //end for loop
-				} //end increase
+					if (tmp>actualExpansion){ //failed at adding as many bytes to file as we wanted to
+						count=oldSize+actualExpansion;
+					}
+				} //end if increase>0
+
 				//write inode back to disk
 				iblocks[0]=count;
 				IntBuffer ib=IntBuffer.wrap(iblocks);
@@ -687,7 +689,7 @@ public class DFSd extends DFS {
 				writeInode(dFID.getDFileID(),bb.array());
 				updateFS(dFID,ib.array());
 			}
-			
+
 			//write data to file
 			for (int i=1;i<Constants.INTS_PER_INODE;i++){
 				if (count<=0){
@@ -742,7 +744,7 @@ public class DFSd extends DFS {
 		if (!d.checkValid()){
 			d.waitValid(); //wait for fetch to finish
 		}
-		
+
 		int bytes=d.read(buffer, startOffset, count);
 		cache.releaseBlock(d);
 		return bytes;
@@ -806,10 +808,10 @@ public class DFSd extends DFS {
 		}
 		System.out.println();
 
-		
+
 		return new ArrayList<DFileID>(tmp);
 	}
-	
+
 
 	/* HELPER FUNCTIONS */
 	//wrapping the DFS metadata to be thread-safe
