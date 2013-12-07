@@ -21,18 +21,10 @@ import dblockcache.DBufferCached;
 
 
 /*
+ * TODO: 
+ * -DEAL WITH SYNCHRONIZATION ISSUES ON SETS AND MAP
+ * -UPDATE EVERYTHING THAT CALLS WRITEBLOCK and WRITEINODE TO CHECK FOR ERRORS (RETURN -1)
  * 
- * BID 0 is left empty
- * FID spans 1-Constants.MAX_DFILES
- * 
- * FID = file ID
- * BID = block ID
- * offset = offset of inode within block
- * 
- * FID = (BID-1) * inode_per_block + offset + 1
- * 
- * BID = ((FID-1) / inode_per_block) + 1
- * offset = (FID-1) % inode_per_block
  * 
  */
 
@@ -207,8 +199,10 @@ public class DFSd extends DFS {
 		} // end block loop
 	}
 	
-	/*
-	 * Recursively mark data blocks in from inode as used
+	/**
+	 * Recursively mark data blocks in from inode as used, for use in building metadata during DFS.init
+	 * @param limit maximum number of blocks to mark as used (in case file size<blocks in block map)
+	 * @return the number of blocks marked as used and removed from free_data_blocks. -1 if block ID is invalid or can't remove any more blocks from free_data_blocks.
 	 */
 	private int removeUsedBlock(int BID, int limit, int depth){
 		if (BID<Constants.DATA_REGION || BID>=Constants.NUM_OF_BLOCKS){ //invalid blocks, truncate file
@@ -285,11 +279,12 @@ public class DFSd extends DFS {
 		return did;
 	}
 
-	/*
-	 * Recursively add data blocks from inode to free list, and zeroes them out
-	 * Inodes may list invalid blocks as part of blockmap, code takes that into account
+	/**
+	 * Recursively add data blocks from inode to free list, and zeroes them out. 
+	 * For use in public destroyDFile
+	 * Inodes may list invalid blocks as part of blockmap, code takes that into account by returning -1
 	 * 
-	 * returns the number of blocks freed
+	 * @return the number of blocks freed
 	 */
 	private int destroyDFile(int BID, int limit, int depth){
 		if (BID<Constants.DATA_REGION || BID>=Constants.NUM_OF_BLOCKS){
@@ -336,10 +331,11 @@ public class DFSd extends DFS {
 	@Override
 	public synchronized void destroyDFile(DFileID dFID) {
 		if (dFID.getDFileID()<1 || dFID.getDFileID()>=Constants.DATA_REGION){return;} //invalid dFID
-				
-		DFileID key = new DFileID(dFID.getDFileID());//'0' for initialization
+
+//		DFileID key = new DFileID(dFID.getDFileID());//'0' for initialization
 		
-		int[] iblocks=fs.get((DFileID)key);
+//		int[] iblocks=fs.get((DFileID)key);
+		int[] iblocks=fs.get(dFID);
 		
 		
 		if (iblocks==null){return;} //no such fileID in use
@@ -388,8 +384,9 @@ public class DFSd extends DFS {
 		free_inodes.add(dFID.getDFileID());
 	}
 	
-	/*
+	/**
 	 * Recursively read block data
+	 * @return number of bytes read
 	 */
 	private int readBlocks(int BID, byte[] buffer, int offset, int count, int depth){
 		if (BID<Constants.DATA_REGION || BID>=Constants.NUM_OF_BLOCKS){ //invalid blocks, truncate file
@@ -442,11 +439,14 @@ public class DFSd extends DFS {
 	@Override
 	public int read(DFileID dFID, byte[] buffer, int startOffset, int count) {
 		if (dFID.getDFileID()<1 || dFID.getDFileID()>=Constants.DATA_REGION){return -1;} //invalid dFID
+
+		int countCpy=count;
+		
+		synchronized(dFID){
 		int[] iblocks=fs.get(dFID);
 		if (iblocks==null){return -1;} //no such fileID in use
 		
 		int iSize=iblocks[0];
-		int countCpy=count;
 		
 		if (count>iSize){count=iSize;}
 		
@@ -484,38 +484,131 @@ public class DFSd extends DFS {
 				
 			}
 		}
+		}
 		return countCpy-count;
 	}
-
 	
-	private synchronized int[] addNewBlocks(int[] blocks, int increase){
-		if (increase==0){ //should not happen because checked condition in write
-			return blocks;
+	/**
+	 * Each data block in a file is indexed by 1-number of blocks used.
+	 * @param bix block index
+	 * @return path to reach that data block [inode level, indirect level, doubly indirect level]
+	 */
+	private int[] calculateIndices(int bix){
+		int[] index=new int[3];
+		if (bix<(Constants.INTS_PER_INODE-2)){ //direct
+			index[0]=bix;
+			index[1]=-1;
+			index[2]=-1;
 		}
-		int usedBlocks=getBlockCount(blocks[0]);
-		for (int i=increase;i>0;i--){
-			usedBlocks+=1;
+		else if (bix<(Constants.INTS_PER_INODE-2+Constants.INTS_PER_BLOCK)){ //singly
+			index[0]=(Constants.INTS_PER_INODE-2);
+			bix-=(Constants.INTS_PER_INODE-2);
+			index[1]=bix%Constants.INTS_PER_BLOCK;
+			index[2]=-1;
 		}
-		
-		Integer data=free_data_blocks.ceiling(Constants.DATA_REGION);
-		Integer leaf=free_data_blocks.ceiling(Constants.DATA_REGION);
-		//TODO:
-		return blocks;
+		else { //doubly
+			index[0]=(Constants.INTS_PER_INODE-1);
+			bix-=(Constants.INTS_PER_INODE-2);
+			index[1]=(bix/Constants.INTS_PER_BLOCK)-1;
+			index[2]=bix%Constants.INTS_PER_BLOCK;
+		}
+		return index;
 	}
+	
+	private boolean putNewDirectBlockPtr(DFileID dFID, int[] iblocks, int ix){
+		//iblocks contains entire inode data
+		Integer data=free_data_blocks.ceiling(Constants.DATA_REGION);
+		free_data_blocks.remove(data);
+		iblocks[ix]=data;
+
+		IntBuffer ib=IntBuffer.wrap(iblocks);
+		ByteBuffer bb=ByteBuffer.allocate(Constants.INODE_SIZE);
+		bb.asIntBuffer().put(ib); 
+		int suc=writeInode(dFID.getDFileID(),bb.array()); //rewrite inode
+		if (suc<1){return false;}
+		fs.put(dFID, iblocks);
+		return true;
+	}
+	
+	private boolean putNewIndirectBlockPtr(int blockID, int ix){
+		Integer data=free_data_blocks.ceiling(Constants.DATA_REGION);
+		free_data_blocks.remove(data);
+		IntBuffer ib=getBlockAsInts(blockID);
+		ib.put(ix, data);
+
+		ByteBuffer bb=ByteBuffer.allocate(Constants.INODE_SIZE);
+		bb.asIntBuffer().put(ib); 
+		int suc=writeBlock(blockID, bb.array(), 0, Constants.BLOCK_SIZE);
+		if (suc<1){return false;}
+		return true;
+	}
+	/**
+	 * Recursively write block data
+	 * @return number of bytes read
+	 */
+	private int writeBlocks(int BID, byte[] buffer, int offset, int count, int depth){
+		if (BID<Constants.DATA_REGION || BID>=Constants.NUM_OF_BLOCKS){ //invalid blocks, truncate file
+			return -1;
+		}
+		if (count==0){
+			return 0;
+		}
+		if (depth==0){
+			//direct
+			int tmp=writeBlock(BID,buffer,offset,count);
+			return tmp;
+		}
+		else if (depth==1){
+			//singly
+			IntBuffer ib=getBlockAsInts(BID);
+			int subCt=0;
+			int tmp=0;
+			for (int i=0;i<Constants.INTS_PER_BLOCK;i++){
+				tmp=writeBlocks(ib.get(i),buffer,offset,count,0);
+				if (tmp<1){
+					return subCt;
+				}
+				count-=tmp;
+				offset+=tmp;
+				subCt+=tmp;
+			}
+			return subCt;
+		}
+		else if (depth==2){
+			//doubly
+			IntBuffer ib=getBlockAsInts(BID);
+			int subCt=0;
+			int tmp=0;
+			for (int i=0;i<Constants.INTS_PER_BLOCK;i++){
+				tmp=writeBlocks(ib.get(i),buffer,offset,count,1);
+				if (tmp<1){
+					return subCt;
+				}
+				count-=tmp;
+				offset+=tmp;
+				subCt+=tmp;
+			}
+			return subCt;
+		}
+		return 0; //should be impossible unless inodes changed
+	}
+	
 	
 	@Override
 	public int write(DFileID dFID, byte[] buffer, int startOffset, int count) {
 		if (dFID.getDFileID()<1 || dFID.getDFileID()>=Constants.DATA_REGION){return -1;} //invalid dFID
-		//TODO: SYNCHRONIZED?
-		int[] iblocks=fs.get(dFID);
+
+		//TODO: PROPER SYNCHRONIZATION so fs.get cannot give back for same dfileid
+
+		int[] iblocks=fs.get(dFID); 
 		if (iblocks==null){return -1;} //no such fileID in use
-		
+
 		if (count>Constants.MAX_FILE_SIZE){ //upper limit to file
 			count=Constants.MAX_FILE_SIZE;
 		}
-		
-		if (count>iblocks[0]){ //need to increase size of file and change inode
-			
+
+		if (count>iblocks[0]){ //may need to increase size of file and change inode
+
 			//calculate the number of blocks we will need to add to file
 			int oldSize=iblocks[0];
 			int remainingSpace=Constants.BLOCK_SIZE-(oldSize%Constants.BLOCK_SIZE);
@@ -526,30 +619,102 @@ public class DFSd extends DFS {
 			if (partial>remainingSpace){
 				increase+=1;
 			}
+			int oldBlockSize=getBlockCount(oldSize);
+
+			//TODO: MORE SMARTER SUCCESS CHECK (add up amounts, write partial)
 
 			//add blocks to expand file
 			if (increase>0){
-				iblocks=addNewBlocks(iblocks, increase);
-			}
-			
-			//write inode back to disk
-			iblocks[0]=count;
-			IntBuffer ib=IntBuffer.wrap(iblocks);
-			ByteBuffer bb=ByteBuffer.allocate(Constants.INODE_SIZE);
-			bb.asIntBuffer().put(ib);
-			writeInode(dFID.getDFileID(),bb.array());
-			
-			synchronized(this){
-			
-			fs.put(dFID, iblocks); 
-
-			}
-			
+				for (int i=0;i<increase;i++){
+					oldBlockSize+=1;
+					int[] ix=calculateIndices(oldBlockSize);
+					boolean suc=true;
+					if (ix[1]==-1){ //direct, need to update inode
+						suc=putNewDirectBlockPtr(dFID,iblocks,ix[0]);
+						if (!suc){return -1;}
+					}
+					else {
+						if (ix[2]==-1){ //singly indirect
+							if (ix[1]==0){ //need to update inode by adding branch
+								suc=putNewDirectBlockPtr(dFID,iblocks,ix[0]);
+								if (!suc){return -1;}
+							}
+							suc=putNewIndirectBlockPtr(iblocks[ix[0]], ix[1]);
+							if (!suc){return -1;}
+						}
+						else { //doubly indirect
+							if (ix[1]==0 && ix[2]==0){ //update inode
+								suc=putNewDirectBlockPtr(dFID,iblocks,ix[0]);
+								if (!suc){return -1;}
+							}
+							if (ix[2]==0){ //update first level
+								suc=putNewIndirectBlockPtr(iblocks[ix[0]], ix[1]);
+								if (!suc){return -1;}
+							}
+							IntBuffer ib=getBlockAsInts(iblocks[ix[0]]);
+							suc=putNewIndirectBlockPtr(ib.get(ix[1]), ix[2]);
+							if (!suc){return -1;}
+						}
+					}
+				} //end for loop
+				//write inode back to disk
+				iblocks=fs.get(dFID);
+				iblocks[0]=count;
+				IntBuffer ib=IntBuffer.wrap(iblocks);
+				ByteBuffer bb=ByteBuffer.allocate(Constants.INODE_SIZE);
+				bb.asIntBuffer().put(ib);
+				writeInode(dFID.getDFileID(),bb.array());
+				fs.put(dFID, iblocks);
+			} //end increase
 		}
-		//TODO: WRITE DATA TO DISK
-		return 0;
+		//write data to file
+
+		int countCpy=count;
+
+		for (int i=1;i<Constants.INTS_PER_INODE;i++){
+			if (count<=0){
+				break;
+			}
+			//DBuffer.read takes into account counts larger than Constants.BLOCK_SIZE
+			if (i==(Constants.INTS_PER_INODE-2)){
+				//singly indirect
+				int tmp=writeBlocks(iblocks[i],buffer,startOffset,count,1);
+				if (tmp<1){
+					break;
+				}
+				count-=tmp;
+				startOffset+=tmp;
+			}
+			else if (i==(Constants.INTS_PER_INODE-1)){
+				//doubly indirect
+				int tmp=writeBlocks(iblocks[i],buffer,startOffset,count,2);
+				if (tmp<1){
+					break;
+				}
+				count-=tmp;
+				startOffset+=tmp;
+			}
+			else {
+				//direct
+				int tmp=writeBlocks(iblocks[i],buffer,startOffset,count,0);
+				if (tmp<1){
+					break; //stop writing
+				}
+				count-=tmp;	
+				startOffset+=tmp; //advance buffer
+			}
+		}
+		return countCpy-count;
 	}
 
+	/**
+	 * 
+	 * @param BID block ID (where the data is stored)
+	 * @param buffer destination for bytes
+	 * @param startOffset offset for buffer
+	 * @param count number of bytes to read into buffer
+	 * @return number of bytes read into buffer
+	 */
 	private int readBlock(Integer BID, byte[] buffer, int startOffset, int count){
 		DBuffer d=cache.getBlock(BID);
 		
@@ -562,33 +727,39 @@ public class DFSd extends DFS {
 		
 	}
 	
-	private void writeBlock(Integer BID, byte[] buffer, int startOffset, int count){
+	private int writeBlock(Integer BID, byte[] buffer, int startOffset, int count){
 		DBuffer d=cache.getBlock(BID);
 		
 		if (!d.checkClean()){
 			d.waitClean(); //wait for fetch to finish
 		}
-		d.write(buffer, startOffset, count);
+		int bytes=d.write(buffer, startOffset, count);
 		cache.releaseBlock(d);
+		return bytes;
 	}
 	
-	//pass in the fileid and buffer for the inode only
-	private void writeInode(Integer FID, byte[] buffer){
+	/**
+	 * @param FID file ID
+	 * @param buffer information for that inode only
+	 */
+	private int writeInode(Integer FID, byte[] buffer){
 		int BID = getBID(FID);
 		int offset = getInodeOffset(FID);
 		
 		byte[] block=new byte[Constants.BLOCK_SIZE];
 		
 
-		readBlock(BID,block,0,Constants.BLOCK_SIZE);
+		int read=readBlock(BID,block,0,Constants.BLOCK_SIZE);
+		if (read<0){return -1;}
 		
-		//rewrite inode in block
+		//rewrite inode into block
 		int inode_offset_bytes=offset*Constants.INTS_PER_INODE*Constants.intBytes;
 		for (int i=0;i<Constants.INODE_SIZE;i++){
 			block[inode_offset_bytes+i]=buffer[i];
 		}
 		
-		writeBlock(BID,block,0,(inode_offset_bytes+Constants.INODE_SIZE));
+		int write=writeBlock(BID,block,0,(inode_offset_bytes+Constants.INODE_SIZE));
+		return write;
 	}
 
 	@Override
@@ -598,9 +769,6 @@ public class DFSd extends DFS {
 		return prop[0];
 	}
 
-	private void zeroBlock(int BID){
-		writeBlock(BID,empty_buf,0,Constants.BLOCK_SIZE);
-	}
 	
 	@Override
 	public List<DFileID> listAllDFiles() {
@@ -615,8 +783,26 @@ public class DFSd extends DFS {
 			
 		return new ArrayList<DFileID>(tmp);
 	}
+	
+	//wrapping the 
+	private synchronized int[] getInodeProp(DFileID dFID){
+		//TODO: fs.get, then deep copy that array and return it
+		
+		return null;
+	}
+	private synchronized boolean removeInode(DFileID dFID){
+		//TODO:
+		return false;
+	}
 
-	//the number of blocks something of size byteNumber would take up
+	private void zeroBlock(int BID){
+		writeBlock(BID,empty_buf,0,Constants.BLOCK_SIZE);
+	}
+	/**the number of blocks something of size byteNumber would take up
+	 * 
+	 * @param byteNumber number of bytes (aka file size)
+	 * @return number of blocks that number of bytes uses
+	 */
 	private int getBlockCount(int byteNumber){
 		int tmp=byteNumber/Constants.BLOCK_SIZE;
 		if ((byteNumber%Constants.BLOCK_SIZE)>0){
@@ -624,6 +810,11 @@ public class DFSd extends DFS {
 		}
 		return tmp;
 	}
+	/**
+	 * 
+	 * @param BID block ID
+	 * @return the data in the block interpreted as ints
+	 */
 	private IntBuffer getBlockAsInts(int BID){
 		byte[] buffer=new byte[Constants.BLOCK_SIZE];
 		readBlock(BID,buffer,0,Constants.BLOCK_SIZE);
@@ -633,6 +824,12 @@ public class DFSd extends DFS {
 		ib.mark(); //mark index 0
 		return ib;
 	}
+	/**
+	 * Calculates DFileID number from the inode's block id and offset within the block
+	 * @param BID block ID
+	 * @param iOffset inode offset
+	 * @return file ID
+	 */
 	private int getFID(int BID, int iOffset){
 		return (((BID-1)*Constants.INODES_PER_BLOCK)+iOffset+1);
 	}
