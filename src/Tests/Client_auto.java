@@ -1,10 +1,13 @@
 package Tests;
 
 import java.io.BufferedReader;
+import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.IOException;
+import java.io.PrintWriter;
 import java.util.List;
+import java.util.Scanner;
 
 import common.DFileID;
 import dfs.DFSd;
@@ -21,14 +24,19 @@ public class Client_auto implements Runnable {
 	
 	//wrapper functions
 	public DFileID createDFile(){
-		return Filer.createDFile();
+		DFileID fid = Filer.createDFile();
+		System.out.println(this.name + " creates file: " + fid.getDFileID() );
+
+		return fid;
 	}
 	
 	public void destroyFile(DFileID dFID){
+		System.out.println(this.name + " destroys file: " + dFID.getDFileID());
 		Filer.destroyDFile(dFID);
 	}
 	
 	public int read(DFileID dFID, byte[] buffer, int startOffset, int count){
+
 		return Filer.read(dFID, buffer, startOffset, count);
 	}
 	public int write(DFileID dFID, byte[] buffer, int startOffset, int count){
@@ -36,7 +44,7 @@ public class Client_auto implements Runnable {
 	}
 	
 	public List<DFileID> listAllDFiles(){
-		System.out.println("Client " + this.name + " is listing files");
+		System.out.println(this.name + " is listing files");
 		return Filer.listAllDFiles();
 	}
 	public void sync(){
@@ -81,16 +89,33 @@ public class Client_auto implements Runnable {
 						fid= Integer.parseInt(actions[1]); 
 						sizeBuf= Integer.parseInt(actions[2]);
 						offset = Integer.parseInt(actions[3]);
+						String file = actions[4];
+						
 						buf = new byte[sizeBuf];
-						read(new DFileID(fid),buf,offset,buf.length);
+						read(new DFileID(fid),buf,offset,buf.length-offset);
+						String content = new String(buf);
+						
+						PrintWriter writer = new PrintWriter(new String("src/Tests/Results/").concat(file).concat(".txt"), "UTF-8"); //change to outFile name
+						writer.println(content);
+						writer.close();
+						
 						break;
+						
 					case 'w':
 						actions = line.split(" ");
 						fid= Integer.parseInt(actions[1]); 
-						sizeBuf= Integer.parseInt(actions[2]);
-						offset = Integer.parseInt(actions[3]);
-						buf = new byte[sizeBuf];
-						write(new DFileID(fid),buf,offset,buf.length);
+						offset = Integer.parseInt(actions[2]);
+						String from_file = actions[3];
+						String path = new String("src/Tests/").concat(from_file);
+						String msg = new Scanner(new File(path), "UTF-8").useDelimiter("\\A").next();
+						buf = new byte[msg.length()];
+												
+						buf=msg.getBytes();
+						System.out.println(this.name + " writes to file " + fid);
+						int status = write(new DFileID(fid),buf,offset,buf.length);
+						if(status<0){
+							System.out.println("read failed, file doesn't exist?");
+						}
 						break;
 					default:
 						System.out.println("command not recognized: "+ line + " test will exit.");

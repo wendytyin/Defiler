@@ -1,0 +1,23 @@
+Squirtle
+w 3 0 Short_text
+c
+s
+w 4 0 Long_text(100KB)
+r 3 100 0 Squirtle_results
+s
+l
+w 3 0 Short_text
+s
+w 90 0 Short_text
+w 45 0 Long_text(100KB)
+w 5 0 Long_text(100KB)
+w 5 0 Short_text
+s
+l
+d 1
+d 2
+d 3 
+d 4
+w 12 0 Super_long_text(500KB)
+l
+r 12 512000 0 Squirtle_results

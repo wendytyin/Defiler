@@ -2,5 +2,5 @@
 //destroyFile(dFID): d [dFID]
 //sync: s
 //List: l
-//read: r [dFID] [sizeBuf] [offset]
-//write: w [dFID] [sizeBuf] [offset]
+//read: r [dFID] [sizeBuf] [offset] [outFile] 
+//write: w [dFID] [offset] [sourceFile]

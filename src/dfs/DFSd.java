@@ -94,6 +94,7 @@ public class DFSd extends DFS {
 
 		buildMetadata();
 		System.out.println("File system initialized.");
+		System.out.println();
 	}
 
 	/**
@@ -106,7 +107,7 @@ public class DFSd extends DFS {
 		//loop through blocks that contain inodes
 		for (int BID=1;BID<Constants.DATA_REGION;BID++){
 			//test
-			System.out.println("entered buildmetadata, BID = " + BID);
+			//System.out.println("entered buildmetadata, BID = " + BID);
 			IntBuffer ib=getBlockAsInts(BID);
 
 
@@ -115,7 +116,7 @@ public class DFSd extends DFS {
 				if ((ib.get(i*Constants.INTS_PER_INODE))>0){ //used inode
 
 					//test	
-					System.out.println("At block " + BID + " inode " + i);
+					//System.out.println("At block " + BID + " inode " + i);
 
 
 
@@ -127,7 +128,7 @@ public class DFSd extends DFS {
 					int[] iblocks=new int[Constants.INTS_PER_INODE];
 
 					//test
-					System.out.println("at this get block, offset is " + (i*Constants.INTS_PER_INODE));
+					//System.out.println("at this get block, offset is " + (i*Constants.INTS_PER_INODE));
 
 					ib.position((i*Constants.INTS_PER_INODE));
 					ib.get(iblocks, 0, Constants.INTS_PER_INODE); //read out inode into int array
@@ -285,6 +286,7 @@ public class DFSd extends DFS {
 		if (BID<Constants.DATA_REGION || BID>=Constants.NUM_OF_BLOCKS){
 			return -1;
 		}
+		
 		if (limit==0){
 			return -1;
 		}
@@ -320,6 +322,8 @@ public class DFSd extends DFS {
 			synchronized(this){ free_data_blocks.add(BID); }
 			return subCt;
 		}
+		
+				
 		return 0;
 	}
 
@@ -327,6 +331,7 @@ public class DFSd extends DFS {
 	public void destroyDFile(DFileID dFID) {
 		if (dFID.getDFileID()<1 || dFID.getDFileID()>=Constants.DATA_REGION){return;} //invalid dFID
 
+	
 		synchronized(dFID){
 			//		DFileID key = new DFileID(dFID.getDFileID());//'0' for initialization
 			//		int[] iblocks=fs.get((DFileID)key);
@@ -371,13 +376,16 @@ public class DFSd extends DFS {
 			//if number of blocks freed < expected number to be freed, there is a memory leak somewhere
 			//but this will be fixed when the program quits/re-initializes.
 
+			
 			//write inode back to memory
 			IntBuffer ib=IntBuffer.wrap(iblocks);
 			ByteBuffer bb=ByteBuffer.allocate(Constants.INODE_SIZE);
 			bb.asIntBuffer().put(ib); 
 			writeInode(dFID.getDFileID(),bb.array()); //zero out the inode in memory
 			addFreeInode(dFID);
+
 		}
+		
 	}
 
 	/**
@@ -645,34 +653,34 @@ public class DFSd extends DFS {
 						if (ix[1]==-1){ //direct, need to update inode
 							suc=putNewDirectBlockPtr(dFID,iblocks,ix[0]);
 							if (suc<0){break;}
-							actualExpansion+=suc;
+							actualExpansion+=Constants.BLOCK_SIZE;
 						}
 						else {
 							if (ix[2]==-1){ //singly indirect
 								if (ix[1]==0){ //need to update inode by adding branch
 									suc=putNewDirectBlockPtr(dFID,iblocks,ix[0]);
 									if (suc<0){break;}
-									actualExpansion+=suc;
+									//actualExpansion+=suc;
 								}
 								suc=putNewIndirectBlockPtr(iblocks[ix[0]], ix[1]);
 								if (suc<0){break;}
-								actualExpansion+=suc;
+								actualExpansion+=Constants.BLOCK_SIZE;
 							}
 							else { //doubly indirect
 								if (ix[1]==0 && ix[2]==0){ //update inode
 									suc=putNewDirectBlockPtr(dFID,iblocks,ix[0]);
 									if (suc<0){break;}
-									actualExpansion+=suc;
+									//actualExpansion+=suc;
 								}
 								if (ix[2]==0){ //update first level
 									suc=putNewIndirectBlockPtr(iblocks[ix[0]], ix[1]);
 									if (suc<0){break;}
-									actualExpansion+=suc;
+									//actualExpansion+=suc;
 								}
 								IntBuffer ib=getBlockAsInts(iblocks[ix[0]]);
 								suc=putNewIndirectBlockPtr(ib.get(ix[1]), ix[2]);
 								if (suc<0){break;}
-								actualExpansion+=suc;
+								actualExpansion+=Constants.BLOCK_SIZE;
 							}
 						}
 					} //end for loop
@@ -803,11 +811,12 @@ public class DFSd extends DFS {
 		Set<DFileID> tmp=fs.keySet();
 
 		//test...to del
-		for(DFileID id:tmp){
-			System.out.print(id + ", ");
+		synchronized(this){
+			for(DFileID id:tmp){
+				System.out.print(id + ", ");
+			}		
+			System.out.println();
 		}
-		System.out.println();
-
 
 		return new ArrayList<DFileID>(tmp);
 	}
