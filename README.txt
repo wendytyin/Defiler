@@ -43,7 +43,7 @@
  
  
  
-/********************* RULES ***************************/
+/********************* RULES AND EQUATIONS ***************************/
 ALL CONCRETE CLASSES ARE NAMED <ABSTRACT SUPERCLASS NAME>d.java.
 
 CONSTANTS
@@ -96,31 +96,81 @@ DFS
 	- If a blockID appears in more than one inode, the inode with lower DFileID retains the block and the later inode is truncated by changing the size to (BLOCK_SIZE*number of blocks up to contended block). E.g. the 3rd direct block in inode 6 is already used in inode 5; inode 6 size=BLOCK_SIZE*2.
 	- If a blockID is invalid (outside of data blocks region), the file is truncated (see previous).
 
+
 /********************* CODE DETAILS ***************************/
 
+/* Added public methods */
+
+DFileID
+	//for use in the hashMap in DFSd
+	public int hashCode(); 	
+	
+	//the calculations shown above
+	public static int getFID(int BID, int iOffset);
+	public static int getBID(int FID); 
+	public static int getInodeOffset(int FID);
+
+DFSd
+	//access to singleton corresponding to three constructors
+	public static DFSd instance(String volName, boolean format);
+	public static DFSd instance(boolean format);
+	public static DFSd instance();
+
+DBufferCached
+	//access to singleton
+	public static DBufferCached instance(int cacheSize, VirtualDisk disk);
+	
+DBufferd
+	//DBufferCached calls these methods within .getBlock and .releaseBlock, in order to mark a buffer as busy or not. 
+	//Helps ensure invariance of a block
+	public void hold();
+	public void release();
+	
+VirtualDiskd
+	//access to singleton corresponding to three constructors
+	public static VirtualDiskd instance(String volName, boolean format);
+	public static VirtualDiskd instance(boolean format);
+	public static VirtualDiskd instance();
+
+
+/* Added Constants */
+	public static final int intBytes=4;
+	public static final int INODES_PER_BLOCK; //the number of inodes that can fit in a data block
+	public static final int DATA_REGION;  //the first block ID that is a data block (end of fixed inode region)
+	public static final int INTS_PER_INODE;
+	public static final int INTS_PER_BLOCK;
+	
+
 A Client program (Tests folder) gets a Singleton instance of DFSd and calls DFS.init before creating threads. 
-DFSd stores details of each file's block map, its size, the free data blocks, and the available DFileIDs.
+DFSd stores details of each file's block map and size in a HashMap<DFileID (file ID), int[] (size,blockmap)>, the free data blocks in a TreeSet<Integer (blockID)>, and the available DFileIDs in a TreeSet<Integer (file IDs)>.
 DFS enforces two areas of synchronization. 
 Read and write synchronize on the DFileID that was passed in, so multiple threads may access different files concurrently, but read and write on a single file is serialized.
 Any operation in DFS that changes the set of free data blocks, free inodes, or mapping of DFileIDs to block maps, synchronizes on the DFS object. 
 
 In order to read/write a file, DFS gets the block map from its internal mapping of {DFileID->block map}.
 It then loops through the block map and requests each block from DBufferCache. 
+
+The structure of the block map, with a single indirect block and a doubly indirect block, posed the greatest difficulty and makes up the bulk of the code. 
+init(), destroyDFile(), read(), and write() each call their own private recursive function to access the singly and doubly indirect blocks by block ID.
+There are also private functions calculateIndices(int bix) and getBlockCount(int byteNumber) to calculate the number of blocks each file should have, given its file size, and the location of each block in the block map.
+
+
 DBufferCache.getBlock(blockID) returns a DBuffer object, which that thread now holds. 
 
 DBufferCache also has two areas of synchronization. 
 The code synchronizes on a DBuffer object to check if that DBuffer is busy (ie the DBuffer is doing an IO or held by another thread).
 If the DBuffer is busy, the current thread waits until the other thread calls Cache.releaseBlock() or the thread inside VirtualDisk calls ioComplete() on the DBuffer.
-The code synchronizes on the DBufferCache if it needs to update the mapping of {block ID->DBuffer} or the linked list used for LRU calculation.
+The code synchronizes on the DBufferCache if it needs to update the mapping of {block ID->DBuffer} or the linked list used for LRU calculation (moving the DBuffer to the MRU position, ie the tail of the linked list)
 
 LRU is implemented with a linked list. The head of the linked list is the least recently accessed DBuffer. If no DBuffer contains the data we want and we've filled the cache to Constants.NUM_OF_CACHE_BLOCKS, Cache scans through the linked list starting from the head. 
 It selects the first DBuffer in the linked list that is not busy, deletes that DBuffer, creates a new one, and adds it to the tail of the LRU linked list.
 
 We debated whether to use this current method of discarding DBuffers, which gives more work to the garbage collector, versus resetting each DBuffer to a new blockID and byte[] buffer. 
-We ended up choosing this method to change the API given in the lab4.pdf as little as possible (there is no "reset" function listed), and because reconstructing objects ensured the DBuffers all started in a similar state with similar clean/busy/valid flags.
+We ended up choosing this method, because it altered the API given in the lab4.pdf as little as possible (there is no "reset" function listed), and because reconstructing objects ensured the DBuffers all started in a similar state with similar clean/busy/valid flags.
 
 The Client receives and holds the DBuffer from Cache, and at this point it knows it is the only thread holding that particular DBuffer, and if it is reading/writing, the only thread allowed to read/write that file at that point, thanks to the layers of synchronized statements.
-It can then call the methods in DBuffer. 
+It can then call the methods in DBuffer, making sure to check first (as necessary) if the buffer is clean and valid.
+
 DBuffer submits the necessary changes to VirtualDisk through startRequest(), which puts the io request on a queue. 
 This is a single consumer-multiple producer synchronization problem. We have a single thread that exclusively runs VirtualDisk. 
 That thread waits on the queue for requests, and when a request is submitted by the thread running a DBuffer (using the synchronized method VirtualDisk.startRequest), the VirtualDisk thread wakes up from the synchronized method getRequest() and removes a request, then runs it. 
@@ -146,3 +196,4 @@ We separated the portion that runs the request from the portion that removes the
 
  
  GoF book (Design Patterns: Elements of Reusable Object-Oriented Software)
+ OSTEP readings

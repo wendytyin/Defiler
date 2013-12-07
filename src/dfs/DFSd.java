@@ -24,7 +24,6 @@ import dblockcache.DBufferCached;
 /*
  * TODO: 
  * -DEAL WITH SYNCHRONIZATION ISSUES ON SETS AND MAP
- * -UPDATE EVERYTHING THAT CALLS WRITEBLOCK and WRITEINODE TO CHECK FOR ERRORS (RETURN -1)
  * 
  */
 
@@ -160,7 +159,9 @@ public class DFSd extends DFS {
 						if (j==(Constants.INTS_PER_INODE-2)){
 							//singly
 							int tmp=removeUsedBlock(iblocks[j],(expectedBlocks-fileBlocks), 1);
-							//TODO: CHECK TMP VALUE>0
+							if (tmp<0){
+								break; //invalid block ID
+							}
 							fileBlocks+=tmp;
 							if (tmp<Constants.INTS_PER_BLOCK){
 								//file ended at a sub-block
@@ -170,7 +171,6 @@ public class DFSd extends DFS {
 						else if (j==(Constants.INTS_PER_INODE-1)){
 							//doubly
 							int tmp=removeUsedBlock(iblocks[j],(expectedBlocks-fileBlocks), 2);
-							//TODO: CHECK TMP VALUE>0
 							if (tmp==0){ //should be impossible
 								break;
 							}
@@ -353,15 +353,16 @@ public class DFSd extends DFS {
 					//singly indirect
 					int tmp=destroyDFile(iblocks[i],(expectedBlocks-fileBlocks),1);
 					if (tmp<0){
-
+						break;
 					}
-					//TODO: CHECK TMP VALUE>0
 					fileBlocks+=tmp;
 				}
 				else if (i==(Constants.INTS_PER_INODE-1)){
 					//doubly indirect
 					int tmp=destroyDFile(iblocks[i],(expectedBlocks-fileBlocks),2);
-					//TODO: CHECK TMP VALUE>0
+					if(tmp<0){
+						break;
+					}
 					fileBlocks+=tmp;
 				}
 				else {
@@ -448,7 +449,14 @@ public class DFSd extends DFS {
 
 			int iSize=iblocks[0];
 
-			if (count>iSize){count=iSize; countCpy= count;}
+			if (count>iSize){
+				count=iSize; 
+				countCpy= count;
+			}
+			if ((count+startOffset)>buffer.length){
+				count=buffer.length-startOffset;
+				countCpy=count;
+			}
 
 			for (int i=1;i<Constants.INTS_PER_INODE;i++){
 				if (count<=0){
@@ -606,6 +614,10 @@ public class DFSd extends DFS {
 		if (count>Constants.MAX_FILE_SIZE){ //upper limit to file
 			count=Constants.MAX_FILE_SIZE;
 		}
+		if ((count+startOffset)>buffer.length){
+			count=buffer.length-startOffset;
+		}
+
 		int countCpy=count;
 
 		synchronized(dFID){
