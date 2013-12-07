@@ -38,10 +38,12 @@ public class Client implements Runnable {
 	public void sync(){
 		Filer.sync();
 	}
+
 	
 	@Override
 	public void run() {
 		while(true){
+			
 		}
 		
 	}

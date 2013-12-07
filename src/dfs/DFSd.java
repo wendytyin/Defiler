@@ -332,11 +332,11 @@ public class DFSd extends DFS {
 			//		DFileID key = new DFileID(dFID.getDFileID());//'0' for initialization
 			//		int[] iblocks=fs.get((DFileID)key);
 			int[] iblocks=getInodeInts(dFID);
-
 			if (iblocks==null){return;} //no such fileID in use
 
 			int fileBlocks=0;
 			int expectedBlocks=getBlockCount(iblocks[0]);
+
 
 			iblocks[0]=0; //clear out inode size
 
@@ -444,7 +444,7 @@ public class DFSd extends DFS {
 
 			int iSize=iblocks[0];
 
-			if (count>iSize){count=iSize;}
+			if (count>iSize){count=iSize; countCpy= count;}
 
 			for (int i=1;i<Constants.INTS_PER_INODE;i++){
 				if (count<=0){
@@ -605,10 +605,14 @@ public class DFSd extends DFS {
 			int[] iblocks=getInodeInts(dFID);
 			if (iblocks==null){return -1;} //no such fileID in use
 
-			if (count>iblocks[0]){ //may need to increase size of file and change inode
+			if (count>iblocks[0] || (iblocks[0]==1 && iblocks[1]==0)){ //may need to increase size of file and change inode
 
 				//calculate the number of blocks we will need to add to file
 				int oldSize=iblocks[0];
+				if(oldSize==1 && iblocks[1]==0){
+					oldSize=0;
+				}
+				
 				int remainingSpace=Constants.BLOCK_SIZE-(oldSize%Constants.BLOCK_SIZE);
 				if (remainingSpace==Constants.BLOCK_SIZE){remainingSpace=0;}
 				int tmp=count-oldSize;
@@ -657,13 +661,15 @@ public class DFSd extends DFS {
 					} //end for loop
 					//write inode back to disk
 					//				iblocks=fs.get(dFID);
-					iblocks[0]=count;
-					IntBuffer ib=IntBuffer.wrap(iblocks);
-					ByteBuffer bb=ByteBuffer.allocate(Constants.INODE_SIZE);
-					bb.asIntBuffer().put(ib);
-					writeInode(dFID.getDFileID(),bb.array());
-					updateFS(dFID,ib.array());
+				
 				} //end increase
+				
+				iblocks[0]=count;
+				IntBuffer ib=IntBuffer.wrap(iblocks);
+				ByteBuffer bb=ByteBuffer.allocate(Constants.INODE_SIZE);
+				bb.asIntBuffer().put(ib);
+				writeInode(dFID.getDFileID(),bb.array());
+				updateFS(dFID,ib.array());
 			}
 
 			//write data to file

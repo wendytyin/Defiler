@@ -49,6 +49,7 @@ public class DFileID {
 	public static int getFID(int BID, int iOffset){
 		return (((BID-1)*Constants.INODES_PER_BLOCK)+iOffset+1);
 	}
+	
 	/**
 	 * @param FID file ID
 	 * @return block ID (offset within byte array in terms of blocks, not bytes)

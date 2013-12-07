@@ -121,6 +121,7 @@ public class DBufferd extends DBuffer {
 			}
 		} else {return -1;} //was dirty, need to push first
 		clean=false;
+		valid = true;
 		return count;
 	}
 
