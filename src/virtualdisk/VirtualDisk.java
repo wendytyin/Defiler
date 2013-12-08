@@ -72,6 +72,7 @@ public abstract class VirtualDisk implements IVirtualDisk {
 	 * Clear the contents of the disk by writing 0s to it
 	 */
 	private void formatStore() {
+		System.out.println("Emptying disk of old content, be patient...");
 		byte b[] = new byte[Constants.BLOCK_SIZE];
 		setBuffer((byte) 0, b, Constants.BLOCK_SIZE);
 		for (int i = 0; i < Constants.NUM_OF_BLOCKS; i++) {
@@ -83,6 +84,7 @@ public abstract class VirtualDisk implements IVirtualDisk {
 				System.out.println("Error in format: WRITE operation failed at the device block " + i);
 			}
 		}
+		System.out.println("Cleared out disk.");
 	}
 
 	/*
