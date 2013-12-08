@@ -1,9 +1,7 @@
 package Tests;
 
-import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.UnsupportedEncodingException;
-import java.util.Scanner;
 
 import common.DFileID;
 import dfs.DFSd;
@@ -67,7 +65,7 @@ public class ManualTest {
 		c1.listAllDFiles();
 		
 		buf2 = new byte[100];
-		int status = c1.read(id, buf2, 0,buf2.length);
+//		int status = c1.read(id, buf2, 0,buf2.length);
 		
 		
 		str = new String(buf2,"UTF-8");

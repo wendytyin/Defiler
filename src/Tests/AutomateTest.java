@@ -1,10 +1,6 @@
 package Tests;
-import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.UnsupportedEncodingException;
-import java.util.Scanner;
-
-import common.DFileID;
 import dfs.DFSd;
 
 public class AutomateTest {
