@@ -67,7 +67,7 @@ public class Client_auto implements Runnable {
 		}
 		
 		try {
-			while((line=Br.readLine())!=null){
+			while((line=Br.readLine())!=null && line.length()>0){
 				char first = line.charAt(0);	
 				switch(first){
 					case 'c':

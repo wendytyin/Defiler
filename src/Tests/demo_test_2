@@ -1,0 +1,9 @@
+Blatoise
+r 3 70000 0 Blatoise_results
+w 4 0 Long_text(100KB)
+s
+r 4 2000 0 Blatoise_results
+d 1
+s
+l
+
