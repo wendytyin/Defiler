@@ -8,7 +8,7 @@ import java.util.Scanner;
 import common.DFileID;
 import dfs.DFSd;
 
-public class Test {
+public class ManualTest {
 	
 	
 	public static void main(String[] args) throws UnsupportedEncodingException, FileNotFoundException{

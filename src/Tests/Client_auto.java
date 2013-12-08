@@ -117,6 +117,8 @@ public class Client_auto implements Runnable {
 							System.out.println("read failed, file doesn't exist?");
 						}
 						break;
+					case '\r': //carriage return
+						break;
 					default:
 						System.out.println("command not recognized: "+ line + " test will exit.");
 						System.exit(1);
