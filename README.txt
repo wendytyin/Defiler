@@ -26,7 +26,7 @@
 
 	lab4.jar // An executable jar including all the source files and test cases.
 	README	// This file filled with the lab implementation details
-        DeFiler.log   // (optional) auto-generated log on execution of jar file
+    DeFiler.log   // (optional) auto-generated log on execution of jar file
 
 /************************
  * Implementation details
@@ -102,7 +102,50 @@ DFS
 	- If a blockID appears in more than one inode, the inode with lower DFileID retains the block and the later inode is truncated by changing the size to (BLOCK_SIZE*number of blocks up to contended block). E.g. the 3rd direct block in inode 6 is already used in inode 5; inode 6 size=BLOCK_SIZE*2.
 	- If a blockID is invalid (outside of data blocks region), the file is truncated (see previous).
 
-
+TESTING
+	Testing is done through performing multi-threaded accesses/writes/reads to the same DFS within the same test program.
+	A client is a thread that takes 1) client name and 2) the singleton DFS. It has wrapper functions 
+	that call the DFS API.
+	
+	All tests can be found in the /Tests/ folder, two modes of testing are provided:
+	I)MANUALLY LAUNCH CLIENT THREADS:
+		In ManualTest.java client threads are manually created and launched. All actions performed on the DFS
+		is scheduled manually within the test program. The singleton instance of DFS is first initialized, then
+		passed into the constructor of client threads as follows:
+			Client c = new Client("name",DFS);
+			new Thread(c).start();
+		To perform a create: 
+			c.createFile();
+		To perform a delete: 
+			c. destroyFile(fid);
+		To perform a read: 
+			byte[] buf = new byte[bufSize];
+			c.read(fid, buf, 0,buf.length);
+		To perform a write:
+			byte[] buffer = new byte[msg.length()]; //where msg is a String containing to the information to be written
+			buffer = msg.getBytes();
+			c.write(fid, buffer, 0, buffer.length);
+		*Sync needs to be called before program exits in order for changes to persist.
+		
+	II)AUTOMATED CLIENT THREADS
+		In AutomateTest.java client threads perform actions on files according to instructions specified in an action file.
+		A client is construct taking the DFS and its specified action file:
+			Client_auto c = new Client_auto(Filer,"src/Tests/action"); 
+			new Thread(c).start();
+		The syntax for scripting an action file is as follows:
+			create File: c
+			destroyFile(dFID): d [dFID]
+			sync: s
+			List files: l
+			read: r [dFID] [sizeBuf] [offset] [outFile] //where outFile is the name of the file(not DFS file) that contains the read results for verification purposes, the results can be found in Tests/Results/ folder.
+			write: w [dFID] [offset] [sourceFile] //where sourceFile is the source of input to be written (not DFS file)
+		
+	EXISTING DEMO TEST:
+		A demo test (DemoTest.java) is provided, it first initializes the virtual disk to empty out existing content on the disk. (takes a few mins)
+		Then a initializer thread will launch to initialize the virtual disk to a testable state.
+		Three client threads (automated) will run, performing creation, deletion, reads and writes concurrently. 
+		The results of latest reads by individual threads can be found in /Tests/Results/'clientName_results'.
+	
 /********************* CODE DETAILS ***************************/
 
 /* Added public methods */
